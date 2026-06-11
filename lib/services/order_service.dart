@@ -25,6 +25,9 @@ class OrderService {
       buffer.writeln('${i + 1}. ${item.title}');
       buffer.writeln('   ${S.fmt('order_msg_id', {'id': item.productId})}');
       buffer.writeln('   ${S.fmt('order_msg_size', {'size': item.selectedSize})}');
+      if (item.selectedColor.isNotEmpty) {
+        buffer.writeln('   ${S.fmt('order_msg_color', {'color': item.selectedColor})}');
+      }
       buffer.writeln('   ${S.fmt('order_msg_qty', {'qty': '${item.quantity}'})}');
       buffer.writeln('   ${S.fmt('order_msg_price_each', {'price': item.unitPrice.toStringAsFixed(2)})}');
       buffer.writeln('   ${S.fmt('order_msg_subtotal', {'amount': item.lineTotal.toStringAsFixed(2)})}');

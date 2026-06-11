@@ -55,6 +55,12 @@ service cloud.firestore {
       && (newCount == oldCount + 1 || newCount == oldCount - 1);
   }
 
+  function viewCountDeltaValid() {
+    let oldCount = resource.data.get('viewCount', 0);
+    let newCount = request.resource.data.viewCount;
+    return newCount >= 0 && newCount == oldCount + 1;
+  }
+
   // ── Internal rate-limit docs (Cloud Functions only) ──────────────────────
   match /_rate_limits/{docId} {
     allow read, write: if false;
@@ -96,7 +102,8 @@ service cloud.firestore {
       || (isEmployee() && !employeeChangedModerationFields())
       || (isSignedIn()
         && onlyFieldsChanged(['favoriteCount'])
-        && favoriteCountDeltaValid());
+        && favoriteCountDeltaValid())
+      || (onlyFieldsChanged(['viewCount']) && viewCountDeltaValid());
 
   }
 

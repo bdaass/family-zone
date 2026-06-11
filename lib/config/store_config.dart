@@ -2,6 +2,9 @@
 class StoreConfig {
   static const storeName = 'Family Zone';
 
+  /// Public web shop URL (Firebase Hosting). Used for share links.
+  static const webBaseUrl = 'https://family-zone-2026.web.app';
+
   /// Country code + number, digits only (no + or spaces). +961 76 376 228
   static const whatsappNumber = '96176376228';
   static const storeDisplayNumber = '+961 76 376 228';

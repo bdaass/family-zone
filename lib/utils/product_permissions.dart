@@ -9,6 +9,8 @@ class ProductPermissions {
 
   static bool canToggleVisibility(String role) => role == 'admin';
 
+  static bool canApproveProducts(String role) => role == 'admin';
+
   static bool isApproved(Map<String, dynamic> data) => data['approved'] != false;
 
   static bool isVisible(Map<String, dynamic> data) => data['visibility'] == true;

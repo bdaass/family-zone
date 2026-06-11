@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
+import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_image_settings.dart';
 
@@ -10,6 +11,7 @@ class ProductCardItem extends StatefulWidget {
   final String title;
   final String description;
   final String size;
+  final String colors;
   final String productId;
   final double price;
   final double? soldPrice;
@@ -36,6 +38,7 @@ class ProductCardItem extends StatefulWidget {
     required this.title,
     required this.description,
     required this.size,
+    this.colors = '',
     required this.productId,
     required this.price,
     this.soldPrice,
@@ -153,13 +156,13 @@ class _ProductCardItemState extends State<ProductCardItem> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            if (widget.size.isNotEmpty)
+                            if (ProductCatalog.sizesDisplayLabel(widget.size).isNotEmpty)
                               Flexible(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: AppDecor.pill(color: AppColors.cream),
                                   child: Text(
-                                    widget.size.toUpperCase(),
+                                    ProductCatalog.sizesDisplayLabel(widget.size),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.ink, letterSpacing: 0.6),
@@ -170,6 +173,10 @@ class _ProductCardItemState extends State<ProductCardItem> {
                             _PriceLabel(price: widget.price, soldPrice: widget.soldPrice),
                           ],
                         ),
+                        if (ProductCatalog.colorsFromField(widget.colors).isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          _ColorSwatches(colors: ProductCatalog.colorsFromField(widget.colors)),
+                        ],
                         if (widget.showProductId) ...[
                           const SizedBox(height: 4),
                           Text(
@@ -410,6 +417,71 @@ class _ProductImage extends StatelessWidget {
           child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral)),
         );
       },
+    );
+  }
+}
+
+class _ColorSwatches extends StatelessWidget {
+  final List<String> colors;
+
+  const _ColorSwatches({required this.colors});
+
+  static Color _swatchFill(String name) {
+    switch (name.toLowerCase().trim()) {
+      case 'black':
+        return const Color(0xFF1A1A1A);
+      case 'white':
+        return const Color(0xFFF4F4F4);
+      case 'navy':
+        return const Color(0xFF1B2A4A);
+      case 'beige':
+        return const Color(0xFFD8CBB8);
+      case 'gray':
+      case 'grey':
+        return const Color(0xFF9E9E9E);
+      case 'red':
+        return const Color(0xFFC62828);
+      case 'pink':
+        return const Color(0xFFE891A8);
+      case 'blue':
+        return const Color(0xFF1565C0);
+      case 'green':
+        return const Color(0xFF2E7D32);
+      case 'brown':
+        return const Color(0xFF6D4C41);
+      default:
+        final hash = name.toLowerCase().codeUnits.fold(0, (sum, c) => sum + c);
+        return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.42, 0.52).toColor();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = colors.take(5).toList();
+    return Row(
+      children: [
+        for (final color in shown)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: 4),
+            child: Tooltip(
+              message: color,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _swatchFill(color),
+                  border: Border.all(color: AppColors.creamDark),
+                ),
+              ),
+            ),
+          ),
+        if (colors.length > shown.length)
+          Text(
+            '+${colors.length - shown.length}',
+            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+          ),
+      ],
     );
   }
 }

@@ -265,6 +265,8 @@ class _CartLineTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(S.fmt('cart_line_size', {'size': item.selectedSize}), style: const TextStyle(fontSize: 11, color: AppColors.inkMuted)),
+                  if (item.selectedColor.isNotEmpty)
+                    Text(S.fmt('cart_line_color', {'color': item.selectedColor}), style: const TextStyle(fontSize: 11, color: AppColors.inkMuted)),
                   const SizedBox(height: 8),
                   Row(
                     children: [

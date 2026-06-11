@@ -3,15 +3,19 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
+import '../services/product_share_service.dart';
+import '../services/product_view_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_image_settings.dart';
 
 class ProductDetailSheet extends StatefulWidget {
+  final String productDocId;
   final String productId;
   final String title;
   final String description;
   final String imageUrl;
   final String sizeField;
+  final String colorField;
   final double price;
   final double? soldPrice;
   final String seasonLabel;
@@ -26,11 +30,13 @@ class ProductDetailSheet extends StatefulWidget {
 
   const ProductDetailSheet({
     super.key,
+    this.productDocId = '',
     required this.productId,
     required this.title,
     required this.description,
     required this.imageUrl,
     required this.sizeField,
+    this.colorField = '',
     required this.price,
     this.soldPrice,
     required this.seasonLabel,
@@ -46,11 +52,13 @@ class ProductDetailSheet extends StatefulWidget {
 
   static Future<void> show(
     BuildContext context, {
+    String productDocId = '',
     required String productId,
     required String title,
     required String description,
     required String imageUrl,
     required String sizeField,
+    String colorField = '',
     required double price,
     double? soldPrice,
     required String seasonLabel,
@@ -64,11 +72,13 @@ class ProductDetailSheet extends StatefulWidget {
     VoidCallback? onAddToCart,
   }) {
     final sheet = ProductDetailSheet(
+      productDocId: productDocId,
       productId: productId,
       title: title,
       description: description,
       imageUrl: imageUrl,
       sizeField: sizeField,
+      colorField: colorField,
       price: price,
       soldPrice: soldPrice,
       seasonLabel: seasonLabel,
@@ -133,6 +143,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   void initState() {
     super.initState();
     _isFavorited = widget.isFavorited;
+    final docId = widget.productDocId.isNotEmpty ? widget.productDocId : widget.productId;
+    ProductViewService.instance.recordView(docId);
+  }
+
+  Future<void> _shareProduct() async {
+    await ProductShareService.shareProduct(productId: widget.productId, title: widget.title);
   }
 
   bool get _onSale =>
@@ -147,6 +163,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width > 720;
     final sizes = ProductCatalog.sizesForSelection(widget.sizeField);
+    final colors = ProductCatalog.colorsForSelection(widget.colorField);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -167,6 +184,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           color: AppColors.ink,
                         ),
                       ),
+                    ),
+                    IconButton(
+                      tooltip: S.of('share_product'),
+                      onPressed: _shareProduct,
+                      icon: const Icon(Icons.ios_share_rounded, color: AppColors.inkMuted),
                     ),
                     if (widget.onFavoriteToggle != null)
                       IconButton(
@@ -193,7 +215,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           children: [
                             Expanded(child: _imagePanel(isWide: true)),
                             const SizedBox(width: 24),
-                            Expanded(child: _detailsPanel(sizes, isWide: true)),
+                            Expanded(child: _detailsPanel(sizes, colors, isWide: true)),
                           ],
                         )
                       : Column(
@@ -201,7 +223,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           children: [
                             _imagePanel(isWide: false),
                             const SizedBox(height: 20),
-                            _detailsPanel(sizes, isWide: false),
+                            _detailsPanel(sizes, colors, isWide: false),
                           ],
                         ),
                 ),
@@ -259,7 +281,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     );
   }
 
-  Widget _detailsPanel(List<String> sizes, {required bool isWide}) {
+  Widget _detailsPanel(List<String> sizes, List<String> colors, {required bool isWide}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -322,6 +344,30 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               )
               .toList(),
         ),
+        if (colors.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text(
+            S.of('available_colors'),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: colors
+                .map(
+                  (color) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: AppDecor.pill(color: AppColors.white),
+                    child: Text(
+                      color,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.ink),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
         if (widget.favoriteCount > 0) ...[
           const SizedBox(height: 16),
           Row(

@@ -295,6 +295,7 @@ class ProductCatalog {
       productIdFrom(data, docId),
       docId,
       sizeFrom(data),
+      colorsFrom(data),
       season,
       audience.ageGroup,
       audience.sex,
@@ -303,6 +304,7 @@ class ProductCatalog {
       ageGroupLabel(audience.ageGroup),
       sexFormLabel(ageGroup: audience.ageGroup, sex: audience.sex),
       localizedCatalogLabel(type),
+      ...colorsFromField(colorsFrom(data)),
     ].join(' ').toLowerCase();
 
     final tokens = normalized.split(RegExp(r'\s+')).where((token) => token.isNotEmpty);
@@ -328,38 +330,56 @@ class ProductCatalog {
     return (data['size'] ?? '').toString();
   }
 
-  /// Parses stored size text into a unique list (e.g. `41, 42, 43` or `S, M, L`).
-  static List<String> sizesFromField(String? raw) {
+  static String colorsFrom(Map<String, dynamic> data) {
+    return (data['colors'] ?? '').toString();
+  }
+
+  /// Delimiter for size/color lists — keeps labels like `1-5 years` intact.
+  static const listFieldDelimiter = ' | ';
+
+  /// Parses a stored list field (sizes, colors). Supports ` | ` and legacy comma-separated values.
+  static List<String> listFromField(String? raw) {
     final value = (raw ?? '').trim();
     if (value.isEmpty) return [];
 
-    final normalized = value.replaceAll(RegExp(r'[/;|]'), ',');
-    if (normalized.contains(',')) {
-      return _uniqueSizes(normalized.split(','));
+    if (value.contains(listFieldDelimiter)) {
+      return _uniqueListItems(value.split(listFieldDelimiter));
     }
 
-    final spaceParts = value.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-    if (spaceParts.length > 1) return _uniqueSizes(spaceParts);
+    if (value.contains(',')) {
+      return _uniqueListItems(value.split(','));
+    }
+
+    if (value.contains(';')) {
+      return _uniqueListItems(value.split(';'));
+    }
 
     return [value];
   }
 
-  static List<String> _uniqueSizes(Iterable<String> parts) {
+  static List<String> _uniqueListItems(Iterable<String> parts) {
     final seen = <String>{};
     final result = <String>[];
     for (final part in parts) {
-      final size = part.trim();
-      if (size.isEmpty) continue;
-      final key = size.toLowerCase();
-      if (seen.add(key)) result.add(size);
+      final item = part.trim();
+      if (item.isEmpty) continue;
+      final key = item.toLowerCase();
+      if (seen.add(key)) result.add(item);
     }
     return result;
   }
 
-  /// Encodes size chips for Firestore (`41, 42, 43`).
-  static String encodeSizes(Iterable<String> sizes) {
-    return sizesFromField(sizes.join(', ')).join(', ');
+  static String encodeListField(Iterable<String> items) {
+    return items.map((s) => s.trim()).where((s) => s.isNotEmpty).join(listFieldDelimiter);
   }
+
+  static List<String> sizesFromField(String? raw) => listFromField(raw);
+
+  static String encodeSizes(Iterable<String> sizes) => encodeListField(sizes);
+
+  static List<String> colorsFromField(String? raw) => listFromField(raw);
+
+  static String encodeColors(Iterable<String> colors) => encodeListField(colors);
 
   /// Sizes shown in cart / detail; falls back to one-size label when empty.
   static List<String> sizesForSelection(String? raw) {
@@ -375,6 +395,15 @@ class ProductCatalog {
     return '${sizes.take(maxShown - 1).join(' · ')} +${sizes.length - (maxShown - 1)}';
   }
 
+  static String colorsDisplayLabel(String? raw, {int maxShown = 4}) {
+    final colors = colorsFromField(raw);
+    if (colors.isEmpty) return '';
+    if (colors.length <= maxShown) return colors.join(' · ');
+    return '${colors.take(maxShown - 1).join(' · ')} +${colors.length - (maxShown - 1)}';
+  }
+
+  static List<String> colorsForSelection(String? raw) => colorsFromField(raw);
+
   static double effectivePrice(Map<String, dynamic> data) {
     final sold = soldPriceFrom(data);
     final price = priceFrom(data);
@@ -387,6 +416,29 @@ class ProductCatalog {
     if (raw is int) return raw;
     if (raw is double) return raw.toInt();
     return int.tryParse(raw.toString()) ?? 0;
+  }
+
+  static int viewCountFrom(Map<String, dynamic> data) {
+    final raw = data['viewCount'] ?? 0;
+    if (raw is int) return raw;
+    if (raw is double) return raw.toInt();
+    return int.tryParse(raw.toString()) ?? 0;
+  }
+
+  static const lowStockThreshold = 5;
+
+  static int? stockQtyFrom(Map<String, dynamic> data) {
+    final raw = data['stockQty'];
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    if (raw is double) return raw.toInt();
+    return int.tryParse(raw.toString());
+  }
+
+  static bool isLowStockAlert(int? stockQty, {bool sold = false}) {
+    if (sold) return true;
+    if (stockQty == null) return false;
+    return stockQty <= lowStockThreshold;
   }
 
   static double priceFrom(Map<String, dynamic> data) => (data['price'] ?? 0.0).toDouble();
@@ -421,6 +473,7 @@ class ProductCatalog {
     required String description,
     required String productId,
     required String size,
+    required String colors,
     required String season,
     required String ageGroup,
     required String sex,
@@ -431,12 +484,14 @@ class ProductCatalog {
       description,
       productId,
       size,
+      colors,
       normalizeSeason(season),
       normalizeAgeGroup(ageGroup),
       normalizeSex(sex),
       sexFormLabel(ageGroup: ageGroup, sex: sex),
       normalizeType(type),
       ...sizesFromField(size),
+      ...colorsFromField(colors),
     ];
 
     final tokens = <String>{};
@@ -458,6 +513,7 @@ class ProductCatalog {
     required String description,
     required String productId,
     required String size,
+    required String colors,
     required double price,
     double? soldPrice,
     required String season,
@@ -472,6 +528,7 @@ class ProductCatalog {
         description: description,
         productId: productId,
         size: size,
+        colors: colors,
         season: season,
         ageGroup: ageGroup,
         sex: sex,

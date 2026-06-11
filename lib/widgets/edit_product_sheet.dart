@@ -5,6 +5,7 @@ import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
 import 'audience_fields.dart';
+import 'color_input_field.dart';
 import 'size_input_field.dart';
 
 class EditProductSheet extends StatefulWidget {
@@ -12,6 +13,8 @@ class EditProductSheet extends StatefulWidget {
   final String title;
   final String description;
   final String size;
+  final String colors;
+  final int? stockQty;
   final double price;
   final double? soldPrice;
   final String season;
@@ -25,6 +28,8 @@ class EditProductSheet extends StatefulWidget {
     required this.title,
     required this.description,
     required this.size,
+    this.colors = '',
+    this.stockQty,
     required this.price,
     this.soldPrice,
     required this.season,
@@ -43,7 +48,9 @@ class _EditProductSheetState extends State<EditProductSheet> {
   late final TextEditingController _descController;
   late final TextEditingController _priceController;
   late String _sizesEncoded;
+  late String _colorsEncoded;
   late final TextEditingController _soldPriceController;
+  late final TextEditingController _stockQtyController;
   late String _season;
   late String _ageGroup;
   late String _sex;
@@ -56,9 +63,13 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _titleController = TextEditingController(text: widget.title);
     _descController = TextEditingController(text: widget.description);
     _sizesEncoded = widget.size;
+    _colorsEncoded = widget.colors;
     _priceController = TextEditingController(text: widget.price.toStringAsFixed(2));
     _soldPriceController = TextEditingController(
       text: widget.soldPrice != null ? widget.soldPrice!.toStringAsFixed(2) : '',
+    );
+    _stockQtyController = TextEditingController(
+      text: widget.stockQty != null ? '${widget.stockQty}' : '',
     );
     _season = ProductCatalog.seasons.contains(widget.season) ? widget.season : 'summer';
     _ageGroup = ProductCatalog.normalizeAgeGroup(widget.ageGroup);
@@ -74,6 +85,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _descController.dispose();
     _priceController.dispose();
     _soldPriceController.dispose();
+    _stockQtyController.dispose();
     super.dispose();
   }
 
@@ -83,9 +95,12 @@ class _EditProductSheetState extends State<EditProductSheet> {
     final description = _descController.text.trim();
     final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
     final size = ProductCatalog.encodeSizes(sizes);
+    final colors = ProductCatalog.encodeColors(ProductCatalog.colorsFromField(_colorsEncoded));
     final price = double.tryParse(_priceController.text.trim());
     final soldPriceText = _soldPriceController.text.trim();
     final soldPrice = soldPriceText.isEmpty ? null : double.tryParse(soldPriceText);
+    final stockQtyText = _stockQtyController.text.trim();
+    final stockQty = stockQtyText.isEmpty ? null : int.tryParse(stockQtyText);
 
     if (!ProductCatalog.isValidProductId(productId)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_invalid'))));
@@ -103,12 +118,18 @@ class _EditProductSheetState extends State<EditProductSheet> {
       );
       return;
     }
+    if (stockQtyText.isNotEmpty && (stockQty == null || stockQty < 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('stock_qty_invalid'))));
+      return;
+    }
 
     final result = <String, dynamic>{
       'productId': productId,
       'title': title,
       'description': description,
       'size': size,
+      'colors': colors.isEmpty ? FieldValue.delete() : colors,
+      if (stockQty == null) 'stockQty': FieldValue.delete() else 'stockQty': stockQty,
       'price': price,
       'season': _season,
       'ageGroup': _ageGroup,
@@ -119,6 +140,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
         description: description,
         productId: productId,
         size: size,
+        colors: colors,
         price: price,
         soldPrice: soldPrice,
         season: _season,
@@ -171,6 +193,20 @@ class _EditProductSheetState extends State<EditProductSheet> {
             SizeInputField(
               initialValue: _sizesEncoded,
               onEncodedChanged: (value) => _sizesEncoded = value,
+            ),
+            const SizedBox(height: 12),
+            ColorInputField(
+              initialValue: _colorsEncoded,
+              onEncodedChanged: (value) => _colorsEncoded = value,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _stockQtyController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: S.of('field_stock_qty'),
+                hintText: S.of('field_stock_qty_hint'),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(

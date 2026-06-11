@@ -12,6 +12,7 @@ import '../services/product_catalog_service.dart';
 import '../services/product_write_service.dart';
 import '../utils/image_compressor.dart';
 import '../widgets/audience_fields.dart';
+import '../widgets/color_input_field.dart';
 import '../widgets/size_input_field.dart';
 
 class StaffManagementPanel extends StatefulWidget {
@@ -28,8 +29,11 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   final _descController = TextEditingController();
   final _priceController = TextEditingController();
   String _sizesEncoded = '';
+  String _colorsEncoded = '';
   int _sizeInputKey = 0;
+  int _colorInputKey = 0;
   final _soldPriceController = TextEditingController();
+  final _stockQtyController = TextEditingController();
 
   Uint8List? _imageBytes;
   bool _isCompressing = false;
@@ -73,10 +77,13 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     final description = _descController.text.trim();
     final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
     final size = ProductCatalog.encodeSizes(sizes);
+    final colors = ProductCatalog.encodeColors(ProductCatalog.colorsFromField(_colorsEncoded));
     final priceParsed = double.tryParse(_priceController.text.trim());
 
     final soldPriceText = _soldPriceController.text.trim();
     final soldPriceParsed = soldPriceText.isEmpty ? null : double.tryParse(soldPriceText);
+    final stockQtyText = _stockQtyController.text.trim();
+    final stockQtyParsed = stockQtyText.isEmpty ? null : int.tryParse(stockQtyText);
 
     if (!ProductCatalog.isValidProductId(productId)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_invalid'))));
@@ -92,6 +99,10 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(S.of('sale_price_invalid'))),
       );
+      return;
+    }
+    if (stockQtyText.isNotEmpty && (stockQtyParsed == null || stockQtyParsed < 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('stock_qty_invalid'))));
       return;
     }
 
@@ -120,6 +131,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         'title': title,
         'description': description,
         'size': size,
+        if (colors.isNotEmpty) 'colors': colors,
         'price': priceParsed,
         if (soldPriceParsed != null) 'soldPrice': soldPriceParsed,
         'imageUrl': imageUrl,
@@ -128,6 +140,8 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         'sex': _formSex,
         'type': _formType,
         'favoriteCount': 0,
+        'viewCount': 0,
+        if (stockQtyParsed != null) 'stockQty': stockQtyParsed,
         'visibility': isAdmin,
         'approved': isAdmin,
         'sold': false,
@@ -137,6 +151,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
           description: description,
           productId: productId,
           size: size,
+          colors: colors,
           price: priceParsed,
           soldPrice: soldPriceParsed,
           season: _formSeason,
@@ -153,11 +168,14 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
       _descController.clear();
       setState(() {
         _sizesEncoded = '';
+        _colorsEncoded = '';
         _sizeInputKey++;
+        _colorInputKey++;
         _imageBytes = null;
       });
       _priceController.clear();
       _soldPriceController.clear();
+      _stockQtyController.clear();
 
       if (mounted) {
         final message = isAdmin
@@ -181,6 +199,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     _descController.dispose();
     _priceController.dispose();
     _soldPriceController.dispose();
+    _stockQtyController.dispose();
     super.dispose();
   }
 
@@ -321,11 +340,27 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _stockQtyController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: S.of('field_stock_qty'),
+              hintText: S.of('field_stock_qty_hint'),
+              isDense: true,
+            ),
+          ),
           const SizedBox(height: 16),
           SizeInputField(
-            key: ValueKey(_sizeInputKey),
+            key: ValueKey('size_$_sizeInputKey'),
             dense: true,
             onEncodedChanged: (value) => _sizesEncoded = value,
+          ),
+          const SizedBox(height: 16),
+          ColorInputField(
+            key: ValueKey('color_$_colorInputKey'),
+            dense: true,
+            onEncodedChanged: (value) => _colorsEncoded = value,
           ),
           const SizedBox(height: 16),
           AudienceFields(

@@ -4,6 +4,7 @@ class CartItem {
   final String title;
   final String imageUrl;
   final String selectedSize;
+  final String selectedColor;
   final int quantity;
   final double unitPrice;
 
@@ -13,11 +14,14 @@ class CartItem {
     required this.title,
     required this.imageUrl,
     required this.selectedSize,
+    this.selectedColor = '',
     required this.quantity,
     required this.unitPrice,
   });
 
-  String get cartKey => '$productDocId::$selectedSize';
+  String get cartKey => selectedColor.isEmpty
+      ? '$productDocId::$selectedSize'
+      : '$productDocId::$selectedSize::$selectedColor';
 
   double get lineTotal => unitPrice * quantity;
 
@@ -28,6 +32,7 @@ class CartItem {
       title: title,
       imageUrl: imageUrl,
       selectedSize: selectedSize,
+      selectedColor: selectedColor,
       quantity: quantity ?? this.quantity,
       unitPrice: unitPrice,
     );
@@ -39,6 +44,7 @@ class CartItem {
         'title': title,
         'imageUrl': imageUrl,
         'selectedSize': selectedSize,
+        'selectedColor': selectedColor,
         'quantity': quantity,
         'unitPrice': unitPrice,
       };
@@ -50,6 +56,7 @@ class CartItem {
       title: (map['title'] ?? 'Item').toString(),
       imageUrl: (map['imageUrl'] ?? '').toString(),
       selectedSize: (map['selectedSize'] ?? 'One size').toString(),
+      selectedColor: (map['selectedColor'] ?? '').toString(),
       quantity: (map['quantity'] is int) ? map['quantity'] as int : int.tryParse('${map['quantity']}') ?? 1,
       unitPrice: (map['unitPrice'] is num) ? (map['unitPrice'] as num).toDouble() : double.tryParse('${map['unitPrice']}') ?? 0,
     );

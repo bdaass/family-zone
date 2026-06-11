@@ -12,6 +12,7 @@ class AddToCartSheet extends StatefulWidget {
   final String title;
   final String imageUrl;
   final String sizeField;
+  final String colorField;
   final double price;
   final double? soldPrice;
 
@@ -22,6 +23,7 @@ class AddToCartSheet extends StatefulWidget {
     required this.title,
     required this.imageUrl,
     required this.sizeField,
+    this.colorField = '',
     required this.price,
     this.soldPrice,
   });
@@ -33,6 +35,7 @@ class AddToCartSheet extends StatefulWidget {
     required String title,
     required String imageUrl,
     required String sizeField,
+    String colorField = '',
     required double price,
     double? soldPrice,
   }) {
@@ -46,6 +49,7 @@ class AddToCartSheet extends StatefulWidget {
         title: title,
         imageUrl: imageUrl,
         sizeField: sizeField,
+        colorField: colorField,
         price: price,
         soldPrice: soldPrice,
       ),
@@ -58,7 +62,9 @@ class AddToCartSheet extends StatefulWidget {
 
 class _AddToCartSheetState extends State<AddToCartSheet> {
   late final List<String> _sizes;
+  late final List<String> _colors;
   late String _selectedSize;
+  String _selectedColor = '';
   int _quantity = 1;
   bool _saving = false;
 
@@ -73,13 +79,21 @@ class _AddToCartSheetState extends State<AddToCartSheet> {
   void initState() {
     super.initState();
     _sizes = ProductCatalog.sizesForSelection(widget.sizeField);
+    _colors = ProductCatalog.colorsForSelection(widget.colorField);
     _selectedSize = _sizes.first;
+    if (_colors.length == 1) {
+      _selectedColor = _colors.first;
+    }
   }
 
   Future<void> _add() async {
     if (_saving) return;
     if (_selectedSize.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('select_size_required'))));
+      return;
+    }
+    if (_colors.length > 1 && _selectedColor.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('select_color_required'))));
       return;
     }
     setState(() => _saving = true);
@@ -91,6 +105,7 @@ class _AddToCartSheetState extends State<AddToCartSheet> {
           title: widget.title,
           imageUrl: widget.imageUrl,
           selectedSize: _selectedSize,
+          selectedColor: _selectedColor,
           quantity: _quantity,
           unitPrice: _unitPrice,
         ),
@@ -157,6 +172,31 @@ class _AddToCartSheetState extends State<AddToCartSheet> {
                 );
               }).toList(),
             ),
+            if (_colors.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text(
+                _colors.length > 1 ? S.of('available_colors') : S.of('color'),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _colors.map((color) {
+                  final selected = _selectedColor == color;
+                  return ChoiceChip(
+                    label: Text(color),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _selectedColor = color),
+                    selectedColor: AppColors.coral,
+                    labelStyle: TextStyle(
+                      color: selected ? AppColors.white : AppColors.ink,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
             const SizedBox(height: 20),
             Text(S.of('quantity'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted)),
             const SizedBox(height: 8),

@@ -4,10 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
+import '../models/catalog_sort.dart';
 import '../models/product_catalog.dart';
 import '../services/favorite_service.dart';
 import '../services/product_catalog_service.dart';
@@ -28,6 +30,9 @@ import '../services/order_service.dart';
 import '../services/product_write_service.dart';
 import '../widgets/sidebar_content.dart';
 import '../widgets/product_card.dart';
+import '../widgets/catalog_sort_bar.dart';
+import '../widgets/approval_queue_sheet.dart';
+import '../widgets/staff_analytics_sheet.dart';
 import 'auth_modal.dart';
 import 'staff_panel.dart';
 
@@ -47,7 +52,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   bool saleOnly = false;
   double priceMin = ProductCatalog.priceFilterFloor;
   double priceMax = ProductCatalog.priceFilterCeiling;
+  CatalogSort catalogSort = CatalogSort.newest;
   Set<String> _likedProductIds = {};
+  String? _pendingProductLink;
+  bool _pendingLinkHandled = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSubscription;
   Timer? _searchDebounce;
   bool _authResolved = false;
@@ -81,6 +89,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     CartService.instance.addListener(_onCartChanged);
     _catalog.addListener(_onCatalogChanged);
     _scrollController.addListener(_onScroll);
+    if (kIsWeb) {
+      final linkId = Uri.base.queryParameters['p']?.trim();
+      if (linkId != null && linkId.isNotEmpty) _pendingProductLink = linkId;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _reloadCatalog();
     });
@@ -121,6 +133,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _reloadCatalog();
     } else {
       setState(() {});
+      if (!_catalog.isLoadingInitial) {
+        _tryOpenPendingProductLink();
+      }
     }
   }
 
@@ -355,6 +370,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           title: ProductCatalog.titleFrom(data),
           description: ProductCatalog.descriptionFrom(data),
           size: ProductCatalog.sizeFrom(data),
+          colors: ProductCatalog.colorsFrom(data),
+          stockQty: ProductCatalog.stockQtyFrom(data),
           price: ProductCatalog.priceFrom(data),
           soldPrice: ProductCatalog.soldPriceFrom(data),
           season: (data['season'] ?? 'summer').toString(),
@@ -418,6 +435,58 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     FavoritesSheet.show(context);
   }
 
+  void _showApprovalQueue() {
+    ApprovalQueueSheet.show(
+      context,
+      userRole: userRole,
+      onOpenProduct: (docId, data) => _openProductDetail(docId, data),
+    );
+  }
+
+  void _showStaffAnalytics() {
+    StaffAnalyticsSheet.show(context);
+  }
+
+  Future<void> _tryOpenPendingProductLink() async {
+    if (_pendingLinkHandled || _pendingProductLink == null || !_authResolved) return;
+
+    final targetId = _pendingProductLink!;
+    for (final doc in _catalog.docs) {
+      final data = doc.data();
+      if (doc.id == targetId || ProductCatalog.productIdFrom(data, doc.id) == targetId) {
+        _pendingLinkHandled = true;
+        _pendingProductLink = null;
+        _openProductDetail(doc.id, data);
+        return;
+      }
+    }
+
+    if (_catalog.isLoadingInitial || _catalog.isLoadingMore) return;
+
+    try {
+      var doc = await FirebaseFirestore.instance.collection('products').doc(targetId).get();
+      if (!doc.exists) {
+        final query = await FirebaseFirestore.instance
+            .collection('products')
+            .where('productId', isEqualTo: targetId)
+            .limit(1)
+            .get();
+        if (query.docs.isEmpty) return;
+        doc = query.docs.first;
+      }
+
+      final data = doc.data();
+      if (data == null) return;
+      if (!_isStaff && !ProductPermissions.isPublicCatalogItem(data)) return;
+
+      _pendingLinkHandled = true;
+      _pendingProductLink = null;
+      if (mounted) _openProductDetail(doc.id, data);
+    } catch (e) {
+      debugPrint('Deep link product open failed: $e');
+    }
+  }
+
   void _showCartSheet() {
     CartSheet.show(context);
   }
@@ -452,6 +521,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       title: ProductCatalog.titleFrom(data),
       imageUrl: _productImageUrl(data),
       sizeField: ProductCatalog.sizeFrom(data),
+      colorField: ProductCatalog.colorsFrom(data),
       price: ProductCatalog.priceFrom(data),
       soldPrice: ProductCatalog.soldPriceFrom(data),
     );
@@ -460,11 +530,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void _openProductDetail(String docId, Map<String, dynamic> data) {
     ProductDetailSheet.show(
       context,
+      productDocId: docId,
       productId: ProductCatalog.productIdFrom(data, docId),
       title: ProductCatalog.titleFrom(data),
       description: ProductCatalog.descriptionFrom(data),
       imageUrl: _productImageUrl(data),
       sizeField: ProductCatalog.sizeFrom(data),
+      colorField: ProductCatalog.colorsFrom(data),
       price: ProductCatalog.priceFrom(data),
       soldPrice: ProductCatalog.soldPriceFrom(data),
       seasonLabel: ProductCatalog.localizedCatalogLabel((data['season'] ?? '').toString()),
@@ -622,7 +694,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       onStaffPanelTap: onStaffTap,
       isLoggedIn: userRole != 'guest',
       onSignIn: _showAuthModal,
-      onSignOut: () => FirebaseAuth.instance.signOut(),
+      onSignOut: () async {
+        await GoogleSignIn().signOut();
+        await FirebaseAuth.instance.signOut();
+      },
     );
   }
 
@@ -701,6 +776,22 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                                 onPressed: _contactViaWhatsApp,
                                 icon: Icon(Icons.chat_rounded, color: const Color(0xFF25D366), size: iconSize),
                               ),
+                              if (_isStaff) ...[
+                                IconButton(
+                                  constraints: iconConstraints,
+                                  padding: EdgeInsets.zero,
+                                  tooltip: S.of('approval_queue_title'),
+                                  onPressed: _showApprovalQueue,
+                                  icon: Icon(Icons.pending_actions_rounded, color: AppColors.coral, size: iconSize),
+                                ),
+                                IconButton(
+                                  constraints: iconConstraints,
+                                  padding: EdgeInsets.zero,
+                                  tooltip: S.of('analytics_title'),
+                                  onPressed: _showStaffAnalytics,
+                                  icon: Icon(Icons.insights_rounded, color: AppColors.ink, size: iconSize),
+                                ),
+                              ],
                               if (!_isStaff)
                                 IconButton(
                                   constraints: iconConstraints,
@@ -747,11 +838,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                                   color: AppColors.ink,
                                   size: iconSize,
                                 ),
-                                onPressed: () {
+                                onPressed: () async {
                                   if (user == null) {
                                     _showAuthModal();
                                   } else {
-                                    FirebaseAuth.instance.signOut();
+                                    await GoogleSignIn().signOut();
+                                    await FirebaseAuth.instance.signOut();
                                   }
                                 },
                               ),
@@ -773,62 +865,73 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Widget _buildCollectionHeader(bool isWide, bool useInlineSidebar) {
     return Padding(
       padding: EdgeInsetsDirectional.fromSTEB(isWide ? 20 : 16, 8, isWide ? 20 : 16, 4),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Flexible(
-            flex: isWide ? 0 : 1,
-            child: Text(
-              S.of('shop'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: isWide ? 22 : 18,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.6,
-                color: AppColors.ink,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 4,
-            child: Container(
-              height: 42,
-              decoration: BoxDecoration(
-                color: AppColors.white.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.creamDark),
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
-                textInputAction: TextInputAction.search,
-                textAlignVertical: TextAlignVertical.center,
-                style: const TextStyle(color: AppColors.ink, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: S.of('search_hint'),
-                  hintStyle: const TextStyle(color: AppColors.inkMuted, fontSize: 13),
-                  prefixIcon: const Icon(Icons.search_rounded, color: AppColors.inkMuted, size: 18),
-                  suffixIcon: _searchController.text.trim().isEmpty
-                      ? null
-                      : IconButton(
-                          tooltip: S.of('clear'),
-                          onPressed: _clearSearch,
-                          icon: const Icon(Icons.close_rounded, color: AppColors.inkMuted, size: 18),
-                        ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsetsDirectional.symmetric(vertical: 10, horizontal: 4),
-                  isDense: true,
+          Row(
+            children: [
+              Flexible(
+                flex: isWide ? 0 : 1,
+                child: Text(
+                  S.of('shop'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: isWide ? 22 : 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.6,
+                    color: AppColors.ink,
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 4,
+                child: Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: AppColors.creamDark),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    textInputAction: TextInputAction.search,
+                    textAlignVertical: TextAlignVertical.center,
+                    style: const TextStyle(color: AppColors.ink, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: S.of('search_hint'),
+                      hintStyle: const TextStyle(color: AppColors.inkMuted, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search_rounded, color: AppColors.inkMuted, size: 18),
+                      suffixIcon: _searchController.text.trim().isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: S.of('clear'),
+                              onPressed: _clearSearch,
+                              icon: const Icon(Icons.close_rounded, color: AppColors.inkMuted, size: 18),
+                            ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsetsDirectional.symmetric(vertical: 10, horizontal: 4),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              ),
+              if (!useInlineSidebar) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: _FilterButton(activeCount: _activeFilterCount, onTap: _showFilterSheet),
+                ),
+              ],
+            ],
           ),
-          if (!useInlineSidebar) ...[
-            const SizedBox(width: 8),
-            Flexible(
-              child: _FilterButton(activeCount: _activeFilterCount, onTap: _showFilterSheet),
-            ),
-          ],
+          const SizedBox(height: 10),
+          CatalogSortBar(
+            compact: !isWide,
+            selected: catalogSort,
+            onChanged: (value) => setState(() => catalogSort = value),
+          ),
         ],
       ),
     );
@@ -875,7 +978,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       );
     }
 
-    final filteredDocs = _catalog.docs;
+    final filteredDocs = sortCatalogDocs(_catalog.docs, catalogSort);
 
         if (filteredDocs.isEmpty) {
           final hasSearch = _searchController.text.trim().isNotEmpty;
@@ -931,7 +1034,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     final data = doc.data();
                     final imageUrl = _productImageUrl(data);
                     return TweenAnimationBuilder<double>(
-                      key: ValueKey('${doc.id}-$selectedSeason-$selectedAgeGroup-$selectedSex-$selectedCategory-$saleOnly-$priceMin-$priceMax-${_searchController.text}'),
+                      key: ValueKey('${doc.id}-$catalogSort-$selectedSeason-$selectedAgeGroup-$selectedSex-$selectedCategory-$saleOnly-$priceMin-$priceMax-${_searchController.text}'),
                       duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
                       tween: Tween(begin: 0.0, end: 1.0),
                       curve: Curves.easeOutCubic,
@@ -952,6 +1055,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         title: ProductCatalog.titleFrom(data),
                         description: ProductCatalog.descriptionFrom(data),
                         size: ProductCatalog.sizeFrom(data),
+                        colors: ProductCatalog.colorsFrom(data),
                         productId: ProductCatalog.productIdFrom(data, doc.id),
                         price: ProductCatalog.priceFrom(data),
                         soldPrice: ProductCatalog.soldPriceFrom(data),
