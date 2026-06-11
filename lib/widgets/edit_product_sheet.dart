@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
+import 'audience_fields.dart';
 import 'size_input_field.dart';
 
 class EditProductSheet extends StatefulWidget {
@@ -14,7 +15,8 @@ class EditProductSheet extends StatefulWidget {
   final double price;
   final double? soldPrice;
   final String season;
-  final String gender;
+  final String ageGroup;
+  final String sex;
   final String type;
 
   const EditProductSheet({
@@ -26,7 +28,8 @@ class EditProductSheet extends StatefulWidget {
     required this.price,
     this.soldPrice,
     required this.season,
-    required this.gender,
+    required this.ageGroup,
+    required this.sex,
     required this.type,
   });
 
@@ -35,18 +38,21 @@ class EditProductSheet extends StatefulWidget {
 }
 
 class _EditProductSheetState extends State<EditProductSheet> {
+  late final TextEditingController _productIdController;
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
   late final TextEditingController _priceController;
   late String _sizesEncoded;
   late final TextEditingController _soldPriceController;
   late String _season;
-  late String _gender;
+  late String _ageGroup;
+  late String _sex;
   late String _type;
 
   @override
   void initState() {
     super.initState();
+    _productIdController = TextEditingController(text: widget.productId);
     _titleController = TextEditingController(text: widget.title);
     _descController = TextEditingController(text: widget.description);
     _sizesEncoded = widget.size;
@@ -55,14 +61,15 @@ class _EditProductSheetState extends State<EditProductSheet> {
       text: widget.soldPrice != null ? widget.soldPrice!.toStringAsFixed(2) : '',
     );
     _season = ProductCatalog.seasons.contains(widget.season) ? widget.season : 'summer';
-    _gender = ProductCatalog.normalizeGender(widget.gender);
-    if (!ProductCatalog.genders.contains(_gender)) _gender = 'woman';
+    _ageGroup = ProductCatalog.normalizeAgeGroup(widget.ageGroup);
+    _sex = ProductCatalog.normalizeSex(widget.sex);
     _type = ProductCatalog.normalizeType(widget.type);
     if (!ProductCatalog.types.contains(_type)) _type = 'clothes';
   }
 
   @override
   void dispose() {
+    _productIdController.dispose();
     _titleController.dispose();
     _descController.dispose();
     _priceController.dispose();
@@ -71,6 +78,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
   }
 
   void _save() {
+    final productId = _productIdController.text.trim();
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
     final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
@@ -78,6 +86,11 @@ class _EditProductSheetState extends State<EditProductSheet> {
     final price = double.tryParse(_priceController.text.trim());
     final soldPriceText = _soldPriceController.text.trim();
     final soldPrice = soldPriceText.isEmpty ? null : double.tryParse(soldPriceText);
+
+    if (!ProductCatalog.isValidProductId(productId)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_invalid'))));
+      return;
+    }
     if (title.isEmpty || description.isEmpty || sizes.isEmpty || price == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(sizes.isEmpty ? S.of('sizes_required') : S.of('edit_validation_required'))),
@@ -90,23 +103,27 @@ class _EditProductSheetState extends State<EditProductSheet> {
       );
       return;
     }
+
     final result = <String, dynamic>{
+      'productId': productId,
       'title': title,
       'description': description,
       'size': size,
       'price': price,
       'season': _season,
-      'sex': _gender,
+      'ageGroup': _ageGroup,
+      'sex': _sex,
       'type': _type,
       ...ProductCatalog.searchIndexFields(
         title: title,
         description: description,
-        productId: widget.productId,
+        productId: productId,
         size: size,
         price: price,
         soldPrice: soldPrice,
         season: _season,
-        gender: _gender,
+        ageGroup: _ageGroup,
+        sex: _sex,
         type: _type,
       ),
     };
@@ -137,9 +154,16 @@ class _EditProductSheetState extends State<EditProductSheet> {
             ),
             const SizedBox(height: 20),
             Text(S.of('edit_item_title'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.ink)),
-            const SizedBox(height: 8),
-            Text(S.fmt('edit_item_id', {'id': widget.productId}), style: const TextStyle(fontSize: 12, color: AppColors.inkMuted)),
             const SizedBox(height: 20),
+            TextField(
+              controller: _productIdController,
+              decoration: InputDecoration(
+                labelText: S.of('field_product_id'),
+                hintText: S.of('field_product_id_hint'),
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+            const SizedBox(height: 12),
             TextField(controller: _titleController, decoration: InputDecoration(labelText: S.of('field_title'))),
             const SizedBox(height: 12),
             TextField(controller: _descController, decoration: InputDecoration(labelText: S.of('field_description')), maxLines: 3),
@@ -171,11 +195,11 @@ class _EditProductSheetState extends State<EditProductSheet> {
               onChanged: (v) => setState(() => _season = v!),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _gender,
-              decoration: InputDecoration(labelText: S.of('field_gender')),
-              items: ProductCatalog.genders.map((g) => DropdownMenuItem(value: g, child: Text(ProductCatalog.label(g)))).toList(),
-              onChanged: (v) => setState(() => _gender = v!),
+            AudienceFields(
+              ageGroup: _ageGroup,
+              sex: _sex,
+              onAgeGroupChanged: (v) => setState(() => _ageGroup = v),
+              onSexChanged: (v) => setState(() => _sex = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(

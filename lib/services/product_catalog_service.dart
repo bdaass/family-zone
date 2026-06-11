@@ -9,38 +9,50 @@ class CatalogQuery {
   const CatalogQuery({
     required this.staffMode,
     this.seasonFilter = 'All Seasons',
-    this.genderFilter = 'All',
+    this.ageGroupFilter = 'All',
+    this.sexFilter = 'All',
     this.categoryFilter = 'All Categories',
     this.saleOnly = false,
     this.searchQuery = '',
+    this.priceMin = ProductCatalog.priceFilterFloor,
+    this.priceMax = ProductCatalog.priceFilterCeiling,
   });
 
   final bool staffMode;
   final String seasonFilter;
-  final String genderFilter;
+  final String ageGroupFilter;
+  final String sexFilter;
   final String categoryFilter;
   final bool saleOnly;
   final String searchQuery;
+  final double priceMin;
+  final double priceMax;
 
   @override
   bool operator ==(Object other) {
     return other is CatalogQuery &&
         staffMode == other.staffMode &&
         seasonFilter == other.seasonFilter &&
-        genderFilter == other.genderFilter &&
+        ageGroupFilter == other.ageGroupFilter &&
+        sexFilter == other.sexFilter &&
         categoryFilter == other.categoryFilter &&
         saleOnly == other.saleOnly &&
-        searchQuery == other.searchQuery;
+        searchQuery == other.searchQuery &&
+        priceMin == other.priceMin &&
+        priceMax == other.priceMax;
   }
 
   @override
   int get hashCode => Object.hash(
         staffMode,
         seasonFilter,
-        genderFilter,
+        ageGroupFilter,
+        sexFilter,
         categoryFilter,
         saleOnly,
         searchQuery,
+        priceMin,
+        priceMax,
       );
 }
 
@@ -177,7 +189,8 @@ class ProductCatalogService extends ChangeNotifier {
   bool _usesSimpleBrowse(CatalogQuery q) {
     return q.searchQuery.trim().isEmpty &&
         q.seasonFilter == 'All Seasons' &&
-        q.genderFilter == 'All' &&
+        q.ageGroupFilter == 'All' &&
+        q.sexFilter == 'All' &&
         q.categoryFilter == 'All Categories' &&
         !q.saleOnly;
   }
@@ -232,9 +245,6 @@ class ProductCatalogService extends ChangeNotifier {
       if (seasons.isNotEmpty) {
         query = query.where('season', whereIn: seasons);
       }
-      if (q.genderFilter != 'All') {
-        query = query.where('sex', isEqualTo: ProductCatalog.normalizeGender(q.genderFilter));
-      }
       if (q.categoryFilter != 'All Categories') {
         query = query.where('type', isEqualTo: ProductCatalog.normalizeType(q.categoryFilter));
       }
@@ -257,9 +267,12 @@ class ProductCatalogService extends ChangeNotifier {
     if (!ProductCatalog.matchesFilters(
       data: data,
       seasonFilter: q.seasonFilter,
-      genderFilter: q.genderFilter,
+      ageGroupFilter: q.ageGroupFilter,
+      sexFilter: q.sexFilter,
       categoryFilter: q.categoryFilter,
       saleOnly: q.saleOnly,
+      priceMin: q.priceMin,
+      priceMax: q.priceMax,
     )) {
       return false;
     }

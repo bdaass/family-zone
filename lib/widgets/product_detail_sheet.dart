@@ -146,7 +146,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width > 720;
-    final sizes = ProductCatalog.sizesFromField(widget.sizeField);
+    final sizes = ProductCatalog.sizesForSelection(widget.sizeField);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -297,7 +297,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         const SizedBox(height: 20),
         _detailRow(S.of('field_season'), widget.seasonLabel),
         const SizedBox(height: 10),
-        _detailRow(S.of('field_gender'), widget.genderLabel),
+        _detailRow(S.of('field_audience'), widget.genderLabel),
         const SizedBox(height: 10),
         _detailRow(S.of('field_type'), widget.typeLabel),
         const SizedBox(height: 20),

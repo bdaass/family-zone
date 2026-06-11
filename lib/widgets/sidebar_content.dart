@@ -11,13 +11,19 @@ import 'sidebar_store_section.dart';
 class FilterSidebarContent extends StatelessWidget {
   final String? userRole;
   final String currentSeason;
-  final String currentGender;
+  final String currentAgeGroup;
+  final String currentSex;
   final String currentCategory;
   final bool saleOnly;
+  final double priceMin;
+  final double priceMax;
   final ValueChanged<String> onSeasonChanged;
-  final ValueChanged<String> onGenderChanged;
+  final ValueChanged<String> onAgeGroupChanged;
+  final ValueChanged<String> onSexChanged;
   final ValueChanged<String> onCategoryChanged;
   final ValueChanged<bool> onSaleOnlyChanged;
+  final ValueChanged<RangeValues> onPriceRangeChanged;
+  final ValueChanged<RangeValues>? onPriceRangeCommit;
   final VoidCallback? onStaffPanelTap;
   final VoidCallback? onClearFilters;
   final bool showBrand;
@@ -29,13 +35,19 @@ class FilterSidebarContent extends StatelessWidget {
     super.key,
     this.userRole,
     required this.currentSeason,
-    required this.currentGender,
+    required this.currentAgeGroup,
+    required this.currentSex,
     required this.currentCategory,
     required this.saleOnly,
+    required this.priceMin,
+    required this.priceMax,
     required this.onSeasonChanged,
-    required this.onGenderChanged,
+    required this.onAgeGroupChanged,
+    required this.onSexChanged,
     required this.onCategoryChanged,
     required this.onSaleOnlyChanged,
+    required this.onPriceRangeChanged,
+    this.onPriceRangeCommit,
     this.onStaffPanelTap,
     this.onClearFilters,
     this.showBrand = false,
@@ -91,14 +103,20 @@ class FilterSidebarContent extends StatelessWidget {
                         const SizedBox(height: 14),
                         CatalogFilterBar(
                           compact: true,
-                          currentGender: currentGender,
+                          currentAgeGroup: currentAgeGroup,
+                          currentSex: currentSex,
                           currentSeason: currentSeason,
                           currentCategory: currentCategory,
                           saleOnly: saleOnly,
-                          onGenderChanged: onGenderChanged,
+                          priceMin: priceMin,
+                          priceMax: priceMax,
+                          onAgeGroupChanged: onAgeGroupChanged,
+                          onSexChanged: onSexChanged,
                           onSeasonChanged: onSeasonChanged,
                           onCategoryChanged: onCategoryChanged,
                           onSaleOnlyChanged: onSaleOnlyChanged,
+                          onPriceRangeChanged: onPriceRangeChanged,
+                          onPriceRangeCommit: onPriceRangeCommit,
                           onClearAll: onClearFilters,
                         ),
                       ],

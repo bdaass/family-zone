@@ -3,45 +3,59 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
+import 'price_range_filter.dart';
 
-/// Single, minimal filter surface — gender, season, category as clean pill rows.
+/// Filter surface — age, sex, season, category, sale, and price.
 class CatalogFilterBar extends StatelessWidget {
-  final String currentGender;
+  final String currentAgeGroup;
+  final String currentSex;
   final String currentSeason;
   final String currentCategory;
   final bool saleOnly;
-  final ValueChanged<String> onGenderChanged;
+  final double priceMin;
+  final double priceMax;
+  final ValueChanged<String> onAgeGroupChanged;
+  final ValueChanged<String> onSexChanged;
   final ValueChanged<String> onSeasonChanged;
   final ValueChanged<String> onCategoryChanged;
   final ValueChanged<bool> onSaleOnlyChanged;
+  final ValueChanged<RangeValues> onPriceRangeChanged;
+  final ValueChanged<RangeValues>? onPriceRangeCommit;
   final VoidCallback? onClearAll;
   final bool showClear;
   final bool compact;
 
   const CatalogFilterBar({
     super.key,
-    required this.currentGender,
+    required this.currentAgeGroup,
+    required this.currentSex,
     required this.currentSeason,
     required this.currentCategory,
     required this.saleOnly,
-    required this.onGenderChanged,
+    required this.priceMin,
+    required this.priceMax,
+    required this.onAgeGroupChanged,
+    required this.onSexChanged,
     required this.onSeasonChanged,
     required this.onCategoryChanged,
     required this.onSaleOnlyChanged,
+    required this.onPriceRangeChanged,
+    this.onPriceRangeCommit,
     this.onClearAll,
     this.showClear = true,
     this.compact = false,
   });
 
-  static const _genders = ['All', 'Woman', 'Man', 'Children'];
   static const _seasons = ['All Seasons', 'Summer', 'Winter', 'Sport'];
   static const _categories = ['All Categories', 'Clothes', 'Shoes', 'Lingery', 'Sac', 'Scarf'];
 
   bool get _hasActive =>
-      currentGender != 'All' ||
+      currentAgeGroup != 'All' ||
+      currentSex != 'All' ||
       currentSeason != 'All Seasons' ||
       currentCategory != 'All Categories' ||
-      saleOnly;
+      saleOnly ||
+      ProductCatalog.hasActivePriceFilter(priceMin, priceMax);
 
   @override
   Widget build(BuildContext context) {
@@ -49,13 +63,29 @@ class CatalogFilterBar extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _row(S.of('filter_for'), _genders, currentGender, onGenderChanged),
+        _row(S.of('field_age_group'), ProductCatalog.filterAgeGroups, currentAgeGroup, onAgeGroupChanged),
+        SizedBox(height: gap),
+        _row(
+          S.of('field_sex'),
+          ProductCatalog.filterSexes,
+          currentSex,
+          onSexChanged,
+          ageGroupFilter: currentAgeGroup,
+        ),
         SizedBox(height: gap),
         _row(S.of('filter_season'), _seasons, currentSeason, onSeasonChanged),
         SizedBox(height: gap),
         _row(S.of('filter_type'), _categories, currentCategory, onCategoryChanged),
         SizedBox(height: gap),
         _saleRow(),
+        SizedBox(height: gap),
+        PriceRangeFilter(
+          min: priceMin,
+          max: priceMax,
+          compact: compact,
+          onChanged: onPriceRangeChanged,
+          onChangeEnd: onPriceRangeCommit,
+        ),
         if (showClear && _hasActive && onClearAll != null) ...[
           SizedBox(height: gap),
           TextButton.icon(
@@ -125,7 +155,13 @@ class CatalogFilterBar extends StatelessWidget {
     );
   }
 
-  Widget _row(String label, List<String> options, String selected, ValueChanged<String> onChanged) {
+  Widget _row(
+    String label,
+    List<String> options,
+    String selected,
+    ValueChanged<String> onChanged, {
+    String ageGroupFilter = 'All',
+  }) {
     if (compact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,7 +173,7 @@ class CatalogFilterBar extends StatelessWidget {
             runSpacing: 6,
             children: options.map((value) {
               return _Pill(
-                label: ProductCatalog.filterPillLabel(value),
+                label: ProductCatalog.filterPillLabel(value, ageGroupFilter: ageGroupFilter),
                 selected: selected == value,
                 compact: true,
                 onTap: () => onChanged(value),
@@ -168,7 +204,7 @@ class CatalogFilterBar extends StatelessWidget {
               itemBuilder: (context, index) {
                 final value = options[index];
                 return _Pill(
-                  label: ProductCatalog.filterPillLabel(value),
+                  label: ProductCatalog.filterPillLabel(value, ageGroupFilter: ageGroupFilter),
                   selected: selected == value,
                   onTap: () => onChanged(value),
                 );

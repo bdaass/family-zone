@@ -3,12 +3,128 @@ import '../l10n/app_strings.dart';
 /// Shared product categories, filters, and field helpers.
 class ProductCatalog {
   static const seasons = ['summer', 'winter', 'sport', 'all seasons'];
-  static const genders = ['woman', 'man', 'children'];
+  static const ageGroups = ['kids', 'adult'];
+  static const sexes = ['female', 'male'];
   static const types = ['clothes', 'shoes', 'lingery', 'sac', 'scarf'];
 
   static const filterSeasons = ['All Seasons', 'Summer', 'Winter', 'Sport'];
-  static const filterGenders = ['All', 'Woman', 'Man', 'Children'];
+  static const filterAgeGroups = ['All', 'Kids', 'Adult'];
+  static const filterSexes = ['All', 'Female', 'Male'];
   static const filterCategories = ['All Categories', 'Clothes', 'Shoes', 'Lingery', 'Sac', 'Scarf'];
+
+  static final RegExp _productIdPattern = RegExp(r'^[A-Za-z0-9]+$');
+
+  static bool isValidProductId(String id) {
+    final trimmed = id.trim();
+    return trimmed.isNotEmpty && trimmed.length <= 64 && _productIdPattern.hasMatch(trimmed);
+  }
+
+  static String normalizeAgeGroup(String? raw) {
+    final v = (raw ?? '').toLowerCase().trim();
+    if (v == 'kids' || v == 'kid' || v == 'children' || v == 'child') return 'kids';
+    return 'adult';
+  }
+
+  static String normalizeSex(String? raw) {
+    final v = (raw ?? '').toLowerCase().trim();
+    if (v == 'male' || v == 'man' || v == 'boy' || v == 'm') return 'male';
+    return 'female';
+  }
+
+  /// Reads age + sex from document, including legacy `sex`-only values.
+  static ({String ageGroup, String sex, bool legacyChildrenOnly}) audienceFrom(Map<String, dynamic> data) {
+    if (data['ageGroup'] != null) {
+      return (
+        ageGroup: normalizeAgeGroup(data['ageGroup']?.toString()),
+        sex: normalizeSex(data['sex']?.toString()),
+        legacyChildrenOnly: false,
+      );
+    }
+
+    final legacy = (data['sex'] ?? '').toString().toLowerCase().trim();
+    if (legacy == 'children' || legacy == 'child') {
+      return (ageGroup: 'kids', sex: 'female', legacyChildrenOnly: true);
+    }
+    if (legacy == 'man' || legacy == 'male' || legacy == 'boy') {
+      return (ageGroup: 'adult', sex: 'male', legacyChildrenOnly: false);
+    }
+    return (ageGroup: 'adult', sex: 'female', legacyChildrenOnly: false);
+  }
+
+  static String ageGroupLabel(String ageGroup) {
+    switch (normalizeAgeGroup(ageGroup)) {
+      case 'kids':
+        return S.of('age_kids');
+      default:
+        return S.of('age_adult');
+    }
+  }
+
+  static String sexFormLabel({required String ageGroup, required String sex}) {
+    final isKids = normalizeAgeGroup(ageGroup) == 'kids';
+    if (normalizeSex(sex) == 'male') {
+      return isKids ? S.of('sex_boy') : S.of('sex_man');
+    }
+    return isKids ? S.of('sex_girl') : S.of('sex_woman');
+  }
+
+  static String audienceLabelFromData(Map<String, dynamic> data) {
+    final audience = audienceFrom(data);
+    return sexFormLabel(ageGroup: audience.ageGroup, sex: audience.sex);
+  }
+
+  static String sexFilterPillLabel(String filterValue, {String ageGroupFilter = 'All'}) {
+    switch (filterValue) {
+      case 'All':
+        return S.of('gender_all');
+      case 'Female':
+        if (ageGroupFilter == 'Kids') return S.of('sex_girl');
+        if (ageGroupFilter == 'Adult') return S.of('sex_woman');
+        return S.of('filter_sex_female');
+      case 'Male':
+        if (ageGroupFilter == 'Kids') return S.of('sex_boy');
+        if (ageGroupFilter == 'Adult') return S.of('sex_man');
+        return S.of('filter_sex_male');
+      default:
+        return filterValue;
+    }
+  }
+
+  static String ageGroupFilterPillLabel(String filterValue) {
+    switch (filterValue) {
+      case 'All':
+        return S.of('gender_all');
+      case 'Kids':
+        return S.of('age_kids');
+      case 'Adult':
+        return S.of('age_adult');
+      default:
+        return filterValue;
+    }
+  }
+
+  /// Price slider bounds (USD). Full range = no active price filter.
+  static const double priceFilterFloor = 0;
+  static const double priceFilterCeiling = 250;
+  static const int priceFilterStep = 10;
+  static int get priceFilterDivisions =>
+      ((priceFilterCeiling - priceFilterFloor) / priceFilterStep).round();
+
+  static bool hasActivePriceFilter(double min, double max) =>
+      min > priceFilterFloor || max < priceFilterCeiling;
+
+  static String formatPrice(double value) => '\$${value.round()}';
+
+  static String formatPriceRange(double min, double max) {
+    if (!hasActivePriceFilter(min, max)) return S.of('filter_price_any');
+    return '${formatPrice(min)} – ${formatPrice(max)}';
+  }
+
+  static bool matchesPriceRange(Map<String, dynamic> data, {required double min, required double max}) {
+    if (!hasActivePriceFilter(min, max)) return true;
+    final price = effectivePrice(data);
+    return price >= min && price <= max;
+  }
 
   static String label(String value) => localizedCatalogLabel(value);
 
@@ -23,11 +139,21 @@ class ProductCatalog {
       case 'all seasons':
         return S.of('catalog_all_seasons');
       case 'woman':
-        return S.of('catalog_woman');
+      case 'female':
+        return S.of('sex_woman');
       case 'man':
-        return S.of('catalog_man');
+      case 'male':
+        return S.of('sex_man');
+      case 'girl':
+        return S.of('sex_girl');
+      case 'boy':
+        return S.of('sex_boy');
       case 'children':
-        return S.of('catalog_children');
+      case 'kids':
+      case 'kid':
+        return S.of('age_kids');
+      case 'adult':
+        return S.of('age_adult');
       case 'clothes':
         return S.of('catalog_clothes');
       case 'shoes':
@@ -43,16 +169,14 @@ class ProductCatalog {
     }
   }
 
-  static String filterPillLabel(String filterValue) {
+  static String filterPillLabel(String filterValue, {String ageGroupFilter = 'All'}) {
+    if (filterAgeGroups.contains(filterValue)) {
+      return ageGroupFilterPillLabel(filterValue);
+    }
+    if (filterSexes.contains(filterValue)) {
+      return sexFilterPillLabel(filterValue, ageGroupFilter: ageGroupFilter);
+    }
     switch (filterValue) {
-      case 'All':
-        return S.of('gender_all');
-      case 'Woman':
-        return S.of('gender_women');
-      case 'Man':
-        return S.of('gender_men');
-      case 'Children':
-        return S.of('gender_kids');
       case 'All Seasons':
         return S.of('season_all');
       case 'Summer':
@@ -79,14 +203,11 @@ class ProductCatalog {
   }
 
   /// Short, friendly labels for active filter chips in the UI.
-  static String filterDisplayLabel(String filterValue) {
+  static String filterDisplayLabel(String filterValue, {String ageGroupFilter = 'All'}) {
+    if (filterAgeGroups.contains(filterValue) || filterSexes.contains(filterValue)) {
+      return filterPillLabel(filterValue, ageGroupFilter: ageGroupFilter);
+    }
     switch (filterValue) {
-      case 'Woman':
-        return S.of('gender_women');
-      case 'Man':
-        return S.of('gender_men');
-      case 'Children':
-        return S.of('gender_kids');
       case 'Sac':
         return S.of('category_bags');
       case 'Scarf':
@@ -98,14 +219,6 @@ class ProductCatalog {
       default:
         return filterPillLabel(filterValue);
     }
-  }
-
-  static String normalizeGender(String? raw) {
-    final v = (raw ?? '').toLowerCase().trim();
-    if (v == 'female' || v == 'woman') return 'woman';
-    if (v == 'male' || v == 'man') return 'man';
-    if (v == 'children' || v == 'child') return 'children';
-    return v;
   }
 
   static String normalizeType(String? raw) {
@@ -124,9 +237,19 @@ class ProductCatalog {
     return itemSeason == filter || itemSeason == 'all seasons';
   }
 
-  static bool matchesGender(String? stored, String filterLabel) {
+  static bool matchesAgeGroupFilter(Map<String, dynamic> data, String filterLabel) {
     if (filterLabel == 'All') return true;
-    return normalizeGender(stored) == normalizeGender(filterLabel);
+    final audience = audienceFrom(data);
+    final target = filterLabel == 'Kids' ? 'kids' : 'adult';
+    return audience.ageGroup == target;
+  }
+
+  static bool matchesSexFilter(Map<String, dynamic> data, String filterLabel) {
+    if (filterLabel == 'All') return true;
+    final audience = audienceFrom(data);
+    if (audience.legacyChildrenOnly && audience.ageGroup == 'kids') return true;
+    final target = filterLabel == 'Male' ? 'male' : 'female';
+    return audience.sex == target;
   }
 
   /// All Categories → everything. Clothes → clothes only, etc.
@@ -138,13 +261,18 @@ class ProductCatalog {
   static bool matchesFilters({
     required Map<String, dynamic> data,
     required String seasonFilter,
-    required String genderFilter,
+    required String ageGroupFilter,
+    required String sexFilter,
     required String categoryFilter,
     bool saleOnly = false,
+    double priceMin = priceFilterFloor,
+    double priceMax = priceFilterCeiling,
   }) {
     if (saleOnly && !hasActiveSale(data)) return false;
+    if (!matchesPriceRange(data, min: priceMin, max: priceMax)) return false;
     return matchesSeason(data['season']?.toString(), seasonFilter) &&
-        matchesGender(data['sex']?.toString(), genderFilter) &&
+        matchesAgeGroupFilter(data, ageGroupFilter) &&
+        matchesSexFilter(data, sexFilter) &&
         matchesType(data['type']?.toString(), categoryFilter);
   }
 
@@ -158,7 +286,7 @@ class ProductCatalog {
     if (normalized.isEmpty) return true;
 
     final season = normalizeSeason(data['season']?.toString());
-    final gender = normalizeGender(data['sex']?.toString());
+    final audience = audienceFrom(data);
     final type = normalizeType(data['type']?.toString());
 
     final haystack = [
@@ -168,10 +296,12 @@ class ProductCatalog {
       docId,
       sizeFrom(data),
       season,
-      gender,
+      audience.ageGroup,
+      audience.sex,
       type,
       localizedCatalogLabel(season),
-      localizedCatalogLabel(gender),
+      ageGroupLabel(audience.ageGroup),
+      sexFormLabel(ageGroup: audience.ageGroup, sex: audience.sex),
       localizedCatalogLabel(type),
     ].join(' ').toLowerCase();
 
@@ -292,7 +422,8 @@ class ProductCatalog {
     required String productId,
     required String size,
     required String season,
-    required String gender,
+    required String ageGroup,
+    required String sex,
     required String type,
   }) {
     final parts = <String>[
@@ -301,7 +432,9 @@ class ProductCatalog {
       productId,
       size,
       normalizeSeason(season),
-      normalizeGender(gender),
+      normalizeAgeGroup(ageGroup),
+      normalizeSex(sex),
+      sexFormLabel(ageGroup: ageGroup, sex: sex),
       normalizeType(type),
       ...sizesFromField(size),
     ];
@@ -328,7 +461,8 @@ class ProductCatalog {
     required double price,
     double? soldPrice,
     required String season,
-    required String gender,
+    required String ageGroup,
+    required String sex,
     required String type,
   }) {
     return {
@@ -339,7 +473,8 @@ class ProductCatalog {
         productId: productId,
         size: size,
         season: season,
-        gender: gender,
+        ageGroup: ageGroup,
+        sex: sex,
         type: type,
       ),
       'onSale': computeOnSale(price, soldPrice),

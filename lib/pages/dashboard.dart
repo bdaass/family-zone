@@ -25,6 +25,7 @@ import '../widgets/filter_bottom_sheet.dart';
 import '../services/cart_service.dart';
 import '../services/locale_service.dart';
 import '../services/order_service.dart';
+import '../services/product_write_service.dart';
 import '../widgets/sidebar_content.dart';
 import '../widgets/product_card.dart';
 import 'auth_modal.dart';
@@ -40,9 +41,12 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> with TickerProviderStateMixin {
   String userRole = 'guest';
   String selectedSeason = 'All Seasons';
-  String selectedGender = 'All';
+  String selectedAgeGroup = 'All';
+  String selectedSex = 'All';
   String selectedCategory = 'All Categories';
   bool saleOnly = false;
+  double priceMin = ProductCatalog.priceFilterFloor;
+  double priceMax = ProductCatalog.priceFilterCeiling;
   Set<String> _likedProductIds = {};
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSubscription;
   Timer? _searchDebounce;
@@ -102,10 +106,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   CatalogQuery get _catalogQuery => CatalogQuery(
         staffMode: _isStaff,
         seasonFilter: selectedSeason,
-        genderFilter: selectedGender,
+        ageGroupFilter: selectedAgeGroup,
+        sexFilter: selectedSex,
         categoryFilter: selectedCategory,
         saleOnly: saleOnly,
         searchQuery: _searchController.text,
+        priceMin: priceMin,
+        priceMax: priceMax,
       );
 
   void _onCatalogChanged() {
@@ -247,9 +254,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void _resetFilters() {
     setState(() {
       selectedSeason = 'All Seasons';
-      selectedGender = 'All';
+      selectedAgeGroup = 'All';
+      selectedSex = 'All';
       selectedCategory = 'All Categories';
       saleOnly = false;
+      priceMin = ProductCatalog.priceFilterFloor;
+      priceMax = ProductCatalog.priceFilterCeiling;
     });
     _reloadCatalog();
   }
@@ -257,9 +267,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   int get _activeFilterCount {
     var count = 0;
     if (selectedSeason != 'All Seasons') count++;
-    if (selectedGender != 'All') count++;
+    if (selectedAgeGroup != 'All') count++;
+    if (selectedSex != 'All') count++;
     if (selectedCategory != 'All Categories') count++;
     if (saleOnly) count++;
+    if (ProductCatalog.hasActivePriceFilter(priceMin, priceMax)) count++;
     return count;
   }
 
@@ -270,15 +282,21 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       backgroundColor: Colors.transparent,
       builder: (ctx) => FilterBottomSheet(
         initialSeason: selectedSeason,
-        initialGender: selectedGender,
+        initialAgeGroup: selectedAgeGroup,
+        initialSex: selectedSex,
         initialCategory: selectedCategory,
         initialSaleOnly: saleOnly,
-        onApply: (season, gender, category, onlySale) {
+        initialPriceMin: priceMin,
+        initialPriceMax: priceMax,
+        onApply: (season, ageGroup, sex, category, onlySale, minPrice, maxPrice) {
           setState(() {
             selectedSeason = season;
-            selectedGender = gender;
+            selectedAgeGroup = ageGroup;
+            selectedSex = sex;
             selectedCategory = category;
             saleOnly = onlySale;
+            priceMin = minPrice;
+            priceMax = maxPrice;
           });
           _reloadCatalog();
         },
@@ -330,26 +348,43 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => EditProductSheet(
-        productId: ProductCatalog.productIdFrom(data, docId),
-        title: ProductCatalog.titleFrom(data),
-        description: ProductCatalog.descriptionFrom(data),
-        size: ProductCatalog.sizeFrom(data),
-        price: ProductCatalog.priceFrom(data),
-        soldPrice: ProductCatalog.soldPriceFrom(data),
-        season: (data['season'] ?? 'summer').toString(),
-        gender: (data['sex'] ?? 'woman').toString(),
-        type: (data['type'] ?? 'clothes').toString(),
-      ),
+      builder: (context) {
+        final audience = ProductCatalog.audienceFrom(data);
+        return EditProductSheet(
+          productId: ProductCatalog.productIdFrom(data, docId),
+          title: ProductCatalog.titleFrom(data),
+          description: ProductCatalog.descriptionFrom(data),
+          size: ProductCatalog.sizeFrom(data),
+          price: ProductCatalog.priceFrom(data),
+          soldPrice: ProductCatalog.soldPriceFrom(data),
+          season: (data['season'] ?? 'summer').toString(),
+          ageGroup: audience.ageGroup,
+          sex: audience.sex,
+          type: (data['type'] ?? 'clothes').toString(),
+        );
+      },
     );
     if (result == null || !mounted) return;
 
     try {
-      await FirebaseFirestore.instance.collection('products').doc(docId).update(result);
+      final newProductId = result.remove('productId') as String?;
+      await ProductWriteService.updateProduct(
+        docId: docId,
+        updates: result,
+        newProductId: newProductId,
+      );
       _invalidateCatalog();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('item_updated'))));
       }
+    } on ArgumentError {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_invalid'))));
+      }
+    } on StateError catch (e) {
+      if (!mounted) return;
+      final text = e.message == 'product_id_taken' ? S.of('product_id_taken') : S.fmt('update_failed', {'error': '$e'});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('update_failed', {'error': '$e'}))));
@@ -433,7 +468,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       price: ProductCatalog.priceFrom(data),
       soldPrice: ProductCatalog.soldPriceFrom(data),
       seasonLabel: ProductCatalog.localizedCatalogLabel((data['season'] ?? '').toString()),
-      genderLabel: ProductCatalog.localizedCatalogLabel(ProductCatalog.normalizeGender(data['sex']?.toString())),
+      genderLabel: ProductCatalog.audienceLabelFromData(data),
       typeLabel: ProductCatalog.localizedCatalogLabel(ProductCatalog.normalizeType(data['type']?.toString())),
       favoriteCount: ProductCatalog.favoriteCountFrom(data),
       isFavorited: _likedProductIds.contains(docId),
@@ -550,15 +585,22 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       userRole: userRole,
       showBrand: showBrand,
       currentSeason: selectedSeason,
-      currentGender: selectedGender,
+      currentAgeGroup: selectedAgeGroup,
+      currentSex: selectedSex,
       currentCategory: selectedCategory,
       saleOnly: saleOnly,
+      priceMin: priceMin,
+      priceMax: priceMax,
       onSeasonChanged: (v) {
         setState(() => selectedSeason = v);
         _reloadCatalog();
       },
-      onGenderChanged: (v) {
-        setState(() => selectedGender = v);
+      onAgeGroupChanged: (v) {
+        setState(() => selectedAgeGroup = v);
+        _reloadCatalog();
+      },
+      onSexChanged: (v) {
+        setState(() => selectedSex = v);
         _reloadCatalog();
       },
       onCategoryChanged: (v) {
@@ -569,6 +611,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         setState(() => saleOnly = v);
         _reloadCatalog();
       },
+      onPriceRangeChanged: (values) {
+        setState(() {
+          priceMin = values.start;
+          priceMax = values.end;
+        });
+      },
+      onPriceRangeCommit: (_) => _reloadCatalog(),
       onClearFilters: _resetFilters,
       onStaffPanelTap: onStaffTap,
       isLoggedIn: userRole != 'guest',
@@ -882,7 +931,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     final data = doc.data();
                     final imageUrl = _productImageUrl(data);
                     return TweenAnimationBuilder<double>(
-                      key: ValueKey('${doc.id}-$selectedSeason-$selectedGender-$selectedCategory-$saleOnly-${_searchController.text}'),
+                      key: ValueKey('${doc.id}-$selectedSeason-$selectedAgeGroup-$selectedSex-$selectedCategory-$saleOnly-$priceMin-$priceMax-${_searchController.text}'),
                       duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
                       tween: Tween(begin: 0.0, end: 1.0),
                       curve: Curves.easeOutCubic,

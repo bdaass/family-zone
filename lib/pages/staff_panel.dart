@@ -9,7 +9,9 @@ import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
 import '../services/product_catalog_service.dart';
+import '../services/product_write_service.dart';
 import '../utils/image_compressor.dart';
+import '../widgets/audience_fields.dart';
 import '../widgets/size_input_field.dart';
 
 class StaffManagementPanel extends StatefulWidget {
@@ -21,6 +23,7 @@ class StaffManagementPanel extends StatefulWidget {
 }
 
 class _StaffManagementPanelState extends State<StaffManagementPanel> {
+  final _productIdController = TextEditingController();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _priceController = TextEditingController();
@@ -33,7 +36,8 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   bool _isUploading = false;
 
   String _formSeason = 'summer';
-  String _formGender = 'woman';
+  String _formAgeGroup = 'adult';
+  String _formSex = 'female';
   String _formType = 'clothes';
 
   Future<void> _pickImage() async {
@@ -64,6 +68,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   }
 
   Future<void> _submitProduct() async {
+    final productId = _productIdController.text.trim();
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
     final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
@@ -73,6 +78,10 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     final soldPriceText = _soldPriceController.text.trim();
     final soldPriceParsed = soldPriceText.isEmpty ? null : double.tryParse(soldPriceText);
 
+    if (!ProductCatalog.isValidProductId(productId)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_invalid'))));
+      return;
+    }
     if (title.isEmpty || description.isEmpty || sizes.isEmpty || priceParsed == null || _imageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(sizes.isEmpty ? S.of('sizes_required') : S.of('staff_validation_required'))),
@@ -89,8 +98,12 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     setState(() => _isUploading = true);
 
     try {
-      final docRef = FirebaseFirestore.instance.collection('products').doc();
-      final productId = docRef.id;
+      if (await ProductWriteService.productDocExists(productId)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_taken'))));
+        }
+        return;
+      }
 
       final storageRef = FirebaseStorage.instance.ref().child('product_images/$productId.jpg');
       final uploadTask = storageRef.putData(
@@ -102,7 +115,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
 
       final isAdmin = widget.userRole == 'admin';
 
-      await docRef.set({
+      await FirebaseFirestore.instance.collection('products').doc(productId).set({
         'productId': productId,
         'title': title,
         'description': description,
@@ -111,7 +124,8 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         if (soldPriceParsed != null) 'soldPrice': soldPriceParsed,
         'imageUrl': imageUrl,
         'season': _formSeason,
-        'sex': _formGender,
+        'ageGroup': _formAgeGroup,
+        'sex': _formSex,
         'type': _formType,
         'favoriteCount': 0,
         'visibility': isAdmin,
@@ -126,13 +140,15 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
           price: priceParsed,
           soldPrice: soldPriceParsed,
           season: _formSeason,
-          gender: _formGender,
+          ageGroup: _formAgeGroup,
+          sex: _formSex,
           type: _formType,
         ),
       });
 
       ProductCatalogService.instance.invalidate();
 
+      _productIdController.clear();
       _titleController.clear();
       _descController.clear();
       setState(() {
@@ -156,6 +172,16 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _productIdController.dispose();
+    _titleController.dispose();
+    _descController.dispose();
+    _priceController.dispose();
+    _soldPriceController.dispose();
+    super.dispose();
   }
 
   @override
@@ -202,6 +228,16 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
               ),
             ),
           const SizedBox(height: 16),
+          TextField(
+            controller: _productIdController,
+            decoration: InputDecoration(
+              labelText: S.of('field_product_id'),
+              hintText: S.of('field_product_id_hint'),
+              isDense: true,
+            ),
+            textCapitalization: TextCapitalization.characters,
+          ),
+          const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -292,6 +328,14 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
             onEncodedChanged: (value) => _sizesEncoded = value,
           ),
           const SizedBox(height: 16),
+          AudienceFields(
+            dense: true,
+            ageGroup: _formAgeGroup,
+            sex: _formSex,
+            onAgeGroupChanged: (v) => setState(() => _formAgeGroup = v),
+            onSexChanged: (v) => setState(() => _formSex = v),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -302,17 +346,6 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
                       .toList(),
                   onChanged: (v) => setState(() => _formSeason = v!),
                   decoration: InputDecoration(labelText: S.of('field_season'), isDense: true),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _formGender,
-                  items: ProductCatalog.genders
-                      .map((g) => DropdownMenuItem(value: g, child: Text(ProductCatalog.label(g), style: const TextStyle(fontSize: 12))))
-                      .toList(),
-                  onChanged: (v) => setState(() => _formGender = v!),
-                  decoration: InputDecoration(labelText: S.of('field_gender'), isDense: true),
                 ),
               ),
               const SizedBox(width: 12),
