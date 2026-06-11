@@ -198,24 +198,51 @@ class ProductCatalog {
     return (data['size'] ?? '').toString();
   }
 
-  /// Parses a product size field into selectable options.
+  /// Parses stored size text into a unique list (e.g. `41, 42, 43` or `S, M, L`).
   static List<String> sizesFromField(String? raw) {
     final value = (raw ?? '').trim();
-    if (value.isEmpty) return [S.of('one_size')];
+    if (value.isEmpty) return [];
 
-    if (value.contains(',')) {
-      return value.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-    }
-    if (value.contains('/')) {
-      return value.split('/').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    final normalized = value.replaceAll(RegExp(r'[/;|]'), ',');
+    if (normalized.contains(',')) {
+      return _uniqueSizes(normalized.split(','));
     }
 
     final spaceParts = value.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-    if (spaceParts.length > 1 && spaceParts.every((p) => p.length <= 5)) {
-      return spaceParts;
-    }
+    if (spaceParts.length > 1) return _uniqueSizes(spaceParts);
 
     return [value];
+  }
+
+  static List<String> _uniqueSizes(Iterable<String> parts) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final part in parts) {
+      final size = part.trim();
+      if (size.isEmpty) continue;
+      final key = size.toLowerCase();
+      if (seen.add(key)) result.add(size);
+    }
+    return result;
+  }
+
+  /// Encodes size chips for Firestore (`41, 42, 43`).
+  static String encodeSizes(Iterable<String> sizes) {
+    return sizesFromField(sizes.join(', ')).join(', ');
+  }
+
+  /// Sizes shown in cart / detail; falls back to one-size label when empty.
+  static List<String> sizesForSelection(String? raw) {
+    final sizes = sizesFromField(raw);
+    if (sizes.isEmpty) return [S.of('one_size')];
+    return sizes;
+  }
+
+  static String sizesDisplayLabel(String? raw, {int maxShown = 4}) {
+    final sizes = sizesFromField(raw);
+    if (sizes.isEmpty) return '';
+    if (sizes.length <= maxShown) return sizes.join(' · ');
+    return '${sizes.take(maxShown - 1).join(' · ')} +${sizes.length - (maxShown - 1)}';
   }
 
   static double effectivePrice(Map<String, dynamic> data) {
@@ -246,5 +273,76 @@ class ProductCatalog {
     final sold = soldPriceFrom(data);
     final price = priceFrom(data);
     return sold != null && sold < price;
+  }
+
+  static bool computeOnSale(double price, double? soldPrice) {
+    return soldPrice != null && soldPrice > 0 && soldPrice < price;
+  }
+
+  /// Firestore `whereIn` values for a season filter chip (includes "all seasons" items).
+  static List<String> seasonsForFilter(String filterLabel) {
+    if (filterLabel == 'All Seasons') return const [];
+    return [filterLabel.toLowerCase(), 'all seasons'];
+  }
+
+  /// Lowercase tokens for Firestore `arrayContains` search (max 30).
+  static List<String> buildSearchTokens({
+    required String title,
+    required String description,
+    required String productId,
+    required String size,
+    required String season,
+    required String gender,
+    required String type,
+  }) {
+    final parts = <String>[
+      title,
+      description,
+      productId,
+      size,
+      normalizeSeason(season),
+      normalizeGender(gender),
+      normalizeType(type),
+      ...sizesFromField(size),
+    ];
+
+    final tokens = <String>{};
+    for (final part in parts) {
+      for (final match in RegExp(r'[\w\u0600-\u06FF]+').allMatches(part.toLowerCase())) {
+        final token = match.group(0)!;
+        if (token.length >= 2) tokens.add(token);
+      }
+    }
+
+    final list = tokens.toList()..sort();
+    if (list.length <= 30) return list;
+    return list.sublist(0, 30);
+  }
+
+  /// Denormalized fields written on product create/update for server queries.
+  static Map<String, dynamic> searchIndexFields({
+    required String title,
+    required String description,
+    required String productId,
+    required String size,
+    required double price,
+    double? soldPrice,
+    required String season,
+    required String gender,
+    required String type,
+  }) {
+    return {
+      'searchPrefix': title.trim().toLowerCase(),
+      'searchTokens': buildSearchTokens(
+        title: title,
+        description: description,
+        productId: productId,
+        size: size,
+        season: season,
+        gender: gender,
+        type: type,
+      ),
+      'onSale': computeOnSale(price, soldPrice),
+    };
   }
 }

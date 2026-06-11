@@ -72,12 +72,16 @@ class _AddToCartSheetState extends State<AddToCartSheet> {
   @override
   void initState() {
     super.initState();
-    _sizes = ProductCatalog.sizesFromField(widget.sizeField);
+    _sizes = ProductCatalog.sizesForSelection(widget.sizeField);
     _selectedSize = _sizes.first;
   }
 
   Future<void> _add() async {
     if (_saving) return;
+    if (_selectedSize.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('select_size_required'))));
+      return;
+    }
     setState(() => _saving = true);
     try {
       await CartService.instance.addItem(
@@ -131,7 +135,10 @@ class _AddToCartSheetState extends State<AddToCartSheet> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.coral),
             ),
             const SizedBox(height: 20),
-            Text(S.of('size'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted)),
+            Text(
+              _sizes.length > 1 ? S.of('available_sizes') : S.of('size'),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,

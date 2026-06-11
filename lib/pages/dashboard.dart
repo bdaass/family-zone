@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +10,7 @@ import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../services/favorite_service.dart';
+import '../services/product_catalog_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_permissions.dart';
 import '../widgets/ambient_background.dart';
@@ -41,11 +44,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   String selectedCategory = 'All Categories';
   bool saleOnly = false;
   Set<String> _likedProductIds = {};
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSubscription;
+  Timer? _searchDebounce;
+  bool _authResolved = false;
 
   final GlobalKey _staffPanelKey = GlobalKey();
   final GlobalKey _collectionKey = GlobalKey();
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
+  final ProductCatalogService _catalog = ProductCatalogService.instance;
 
   late AnimationController _entranceController;
   late Animation<double> _fadeAnimation;
@@ -68,6 +75,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     _entranceController.forward();
     CartService.instance.addListener(_onCartChanged);
+    _catalog.addListener(_onCatalogChanged);
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reloadCatalog();
+    });
   }
 
   void _onCartChanged() {
@@ -77,29 +89,91 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   @override
   void dispose() {
     CartService.instance.removeListener(_onCartChanged);
+    _catalog.removeListener(_onCatalogChanged);
+    _searchDebounce?.cancel();
+    _userSubscription?.cancel();
     _entranceController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  CatalogQuery get _catalogQuery => CatalogQuery(
+        staffMode: _isStaff,
+        seasonFilter: selectedSeason,
+        genderFilter: selectedGender,
+        categoryFilter: selectedCategory,
+        saleOnly: saleOnly,
+        searchQuery: _searchController.text,
+      );
+
+  void _onCatalogChanged() {
+    if (!mounted) return;
+    if (_catalog.currentQuery == null) {
+      _reloadCatalog();
+    } else {
+      setState(() {});
+    }
+  }
+
+  Future<void> _reloadCatalog() async {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+    await _catalog.fetchFirst(_catalogQuery);
+  }
+
+  Future<void> _loadMoreProducts() async {
+    await _catalog.fetchMore();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients || !_catalog.hasMore || _catalog.isLoadingMore) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 480) {
+      _loadMoreProducts();
+    }
+  }
+
+  void _invalidateCatalog() {
+    _catalog.invalidate();
+  }
+
+  void _onSearchChanged(String _) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) _reloadCatalog();
+    });
   }
 
   void _clearSearch() {
     if (_searchController.text.isEmpty) return;
     _searchController.clear();
     setState(() {});
+    _reloadCatalog();
   }
 
   void _listenToAuthState() {
     FirebaseAuth.instance.authStateChanges().listen((User? user) async {
       if (user == null) {
-        if (mounted) setState(() {
+        await _userSubscription?.cancel();
+        _userSubscription = null;
+        if (!mounted) return;
+        final wasStaff = _isStaff;
+        setState(() {
           userRole = 'guest';
           _likedProductIds = {};
         });
+        _authResolved = true;
+        if (wasStaff) _reloadCatalog();
       } else {
         await _createUserProfileIfNew(user);
-        await _fetchUserRole(user.uid);
-        _listenToUserLikes(user.uid);
+        _listenToUserDoc(user.uid);
       }
     });
   }
@@ -122,31 +196,36 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
-  Future<void> _fetchUserRole(String uid) async {
-    try {
-      FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((doc) {
-        if (doc.exists && doc.data() != null && mounted) {
-          setState(() => userRole = doc.data()!['role'] ?? 'client');
+  void _listenToUserDoc(String uid) {
+    _userSubscription?.cancel();
+    _userSubscription = FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((doc) {
+      if (!mounted) return;
+
+      if (!doc.exists) {
+        if (!_authResolved) {
+          _authResolved = true;
+          _reloadCatalog();
         }
+        return;
+      }
+
+      final data = doc.data();
+      if (data == null) return;
+
+      final newRole = data['role']?.toString() ?? 'client';
+      final staffModeChanged = ProductPermissions.isStaff(newRole) != _isStaff;
+      setState(() {
+        userRole = newRole;
+        _likedProductIds = Set<String>.from(data['likedProducts'] ?? []);
       });
-    } catch (e) {
-      debugPrint('Role acquisition sync disrupted: $e');
-    }
+      _authResolved = true;
+      if (staffModeChanged) _reloadCatalog();
+    });
   }
 
   bool get _isStaff => ProductPermissions.isStaff(userRole);
 
   bool get _isClient => ProductPermissions.isClient(userRole);
-
-  void _listenToUserLikes(String uid) {
-    FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((doc) {
-      if (mounted) {
-        setState(() {
-          _likedProductIds = Set<String>.from(doc.data()?['likedProducts'] ?? []);
-        });
-      }
-    });
-  }
 
   Future<void> _toggleFavorite(String docId) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -170,6 +249,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       selectedCategory = 'All Categories';
       saleOnly = false;
     });
+    _reloadCatalog();
   }
 
   bool get _hasActiveFilters =>
@@ -204,6 +284,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             selectedCategory = category;
             saleOnly = onlySale;
           });
+          _reloadCatalog();
         },
       ),
     );
@@ -234,6 +315,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         } catch (_) {}
       }
       await FirebaseFirestore.instance.collection('products').doc(docId).delete();
+      _invalidateCatalog();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('item_deleted'))));
       }
@@ -268,6 +350,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     try {
       await FirebaseFirestore.instance.collection('products').doc(docId).update(result);
+      _invalidateCatalog();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('item_updated'))));
       }
@@ -288,6 +371,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         update['approved'] = true;
       }
       await FirebaseFirestore.instance.collection('products').doc(docId).update(update);
+      _invalidateCatalog();
       if (mounted) {
         final msg = newVisibility ? S.of('item_now_visible') : S.of('item_now_hidden');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -402,7 +486,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   opacity: _fadeAnimation,
                   child: SlideTransition(
                     position: _slideAnimation,
-                    child: CustomScrollView(
+                    child: RefreshIndicator(
+                      color: AppColors.coral,
+                      onRefresh: _reloadCatalog,
+                      child: CustomScrollView(
                       controller: _scrollController,
                       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                       slivers: [
@@ -425,6 +512,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         _buildProductGrid(isWide),
                         const SliverToBoxAdapter(child: SizedBox(height: 60)),
                       ],
+                    ),
                     ),
                   ),
                 ),
@@ -469,10 +557,22 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       currentGender: selectedGender,
       currentCategory: selectedCategory,
       saleOnly: saleOnly,
-      onSeasonChanged: (v) => setState(() => selectedSeason = v),
-      onGenderChanged: (v) => setState(() => selectedGender = v),
-      onCategoryChanged: (v) => setState(() => selectedCategory = v),
-      onSaleOnlyChanged: (v) => setState(() => saleOnly = v),
+      onSeasonChanged: (v) {
+        setState(() => selectedSeason = v);
+        _reloadCatalog();
+      },
+      onGenderChanged: (v) {
+        setState(() => selectedGender = v);
+        _reloadCatalog();
+      },
+      onCategoryChanged: (v) {
+        setState(() => selectedCategory = v);
+        _reloadCatalog();
+      },
+      onSaleOnlyChanged: (v) {
+        setState(() => saleOnly = v);
+        _reloadCatalog();
+      },
       onClearFilters: _resetFilters,
       onStaffPanelTap: onStaffTap,
       isLoggedIn: userRole != 'guest',
@@ -656,7 +756,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
               child: TextField(
                 controller: _searchController,
-                onChanged: (_) => setState(() {}),
+                onChanged: _onSearchChanged,
                 textInputAction: TextInputAction.search,
                 textAlignVertical: TextAlignVertical.center,
                 style: const TextStyle(color: AppColors.ink, fontSize: 13),
@@ -690,37 +790,47 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Widget _buildProductGrid(bool isWide) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('products').orderBy('created_at', descending: true).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 64),
-              child: Center(
-                child: Text(S.of('products_load_error'), style: const TextStyle(color: AppColors.inkMuted)),
-              ),
+    if (_catalog.error != null) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 24),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(S.of('products_load_error'), style: const TextStyle(color: AppColors.inkMuted)),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _reloadCatalog,
+                  child: Text(S.of('retry'), style: const TextStyle(color: AppColors.coral)),
+                ),
+              ],
             ),
-          );
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 64),
-              child: Center(
-                child: kIsWeb
-                    ? Text(S.of('products_loading'), style: const TextStyle(color: AppColors.inkMuted))
-                    : const SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.coral),
-                      ),
-              ),
-            ),
-          );
-        }
+          ),
+        ),
+      );
+    }
 
-        final filteredDocs = _filterDocs(snapshot.data?.docs ?? []);
+    if (_catalog.docs.isEmpty &&
+        _catalog.error == null &&
+        (_catalog.isLoadingInitial || _catalog.currentQuery == null)) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 64),
+          child: Center(
+            child: kIsWeb
+                ? Text(S.of('products_loading'), style: const TextStyle(color: AppColors.inkMuted))
+                : const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.coral),
+                  ),
+          ),
+        ),
+      );
+    }
+
+    final filteredDocs = _catalog.docs;
 
         if (filteredDocs.isEmpty) {
           final hasSearch = _searchController.text.trim().isNotEmpty;
@@ -759,86 +869,85 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
         final cardAspectRatio = isWide ? 0.58 : 0.42;
 
-        return SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: isWide ? 20 : 12, vertical: 8),
-          sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: isWide ? 280 : 220,
-              mainAxisSpacing: isWide ? 24 : 18,
-              crossAxisSpacing: isWide ? 20 : 12,
-              childAspectRatio: cardAspectRatio,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final doc = filteredDocs[index];
-                final data = doc.data() as Map<String, dynamic>;
-                final imageUrl = _productImageUrl(data);
-                return TweenAnimationBuilder<double>(
-                  key: ValueKey('${doc.id}-$selectedSeason-$selectedGender-$selectedCategory-$saleOnly-${_searchController.text}'),
-                  duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, value, child) {
-                    return Opacity(
-                      opacity: value,
-                      child: Transform.translate(
-                        offset: Offset(0, 24 * (1 - value)),
-                        child: Transform.scale(
-                          scale: 0.92 + (0.08 * value),
-                          child: child,
-                        ),
+        return SliverMainAxisGroup(
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.symmetric(horizontal: isWide ? 20 : 12, vertical: 8),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: isWide ? 280 : 220,
+                  mainAxisSpacing: isWide ? 24 : 18,
+                  crossAxisSpacing: isWide ? 20 : 12,
+                  childAspectRatio: cardAspectRatio,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final doc = filteredDocs[index];
+                    final data = doc.data();
+                    final imageUrl = _productImageUrl(data);
+                    return TweenAnimationBuilder<double>(
+                      key: ValueKey('${doc.id}-$selectedSeason-$selectedGender-$selectedCategory-$saleOnly-${_searchController.text}'),
+                      duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, 24 * (1 - value)),
+                            child: Transform.scale(
+                              scale: 0.92 + (0.08 * value),
+                              child: child,
+                            ),
+                          ),
+                        );
+                      },
+                      child: ProductCardItem(
+                        imageUrl: imageUrl,
+                        title: ProductCatalog.titleFrom(data),
+                        description: ProductCatalog.descriptionFrom(data),
+                        size: ProductCatalog.sizeFrom(data),
+                        productId: ProductCatalog.productIdFrom(data, doc.id),
+                        price: ProductCatalog.priceFrom(data),
+                        soldPrice: ProductCatalog.soldPriceFrom(data),
+                        favoriteCount: ProductCatalog.favoriteCountFrom(data),
+                        isFavorited: _likedProductIds.contains(doc.id),
+                        onTap: () => _openProductDetail(doc.id, data),
+                        onFavoriteToggle: () => _toggleFavorite(doc.id),
+                        showProductId: _isStaff,
+                        isSoldOut: data['sold'] ?? false,
+                        isHidden: !ProductPermissions.isVisible(data),
+                        isPendingApproval: ProductPermissions.isPendingApproval(data),
+                        showStaffActions: _isStaff,
+                        canDelete: ProductPermissions.canDelete(userRole),
+                        canEdit: ProductPermissions.canEdit(userRole),
+                        canToggleVisibility: ProductPermissions.canToggleVisibility(userRole),
+                        onDelete: () => _deleteProduct(doc.id, imageUrl),
+                        onEdit: () => _editProduct(doc.id, data),
+                        onToggleVisibility: () => _toggleVisibility(doc.id, data),
+                        onAddToCart: _isStaff ? null : () => _openAddToCart(doc.id, data),
                       ),
                     );
                   },
-                  child: ProductCardItem(
-                    imageUrl: imageUrl,
-                    title: ProductCatalog.titleFrom(data),
-                    description: ProductCatalog.descriptionFrom(data),
-                    size: ProductCatalog.sizeFrom(data),
-                    productId: ProductCatalog.productIdFrom(data, doc.id),
-                    price: ProductCatalog.priceFrom(data),
-                    soldPrice: ProductCatalog.soldPriceFrom(data),
-                    favoriteCount: ProductCatalog.favoriteCountFrom(data),
-                    isFavorited: _likedProductIds.contains(doc.id),
-                    onTap: () => _openProductDetail(doc.id, data),
-                    onFavoriteToggle: () => _toggleFavorite(doc.id),
-                    showProductId: _isStaff,
-                    isSoldOut: data['sold'] ?? false,
-                    isHidden: !ProductPermissions.isVisible(data),
-                    isPendingApproval: ProductPermissions.isPendingApproval(data),
-                    showStaffActions: _isStaff,
-                    canDelete: ProductPermissions.canDelete(userRole),
-                    canEdit: ProductPermissions.canEdit(userRole),
-                    canToggleVisibility: ProductPermissions.canToggleVisibility(userRole),
-                    onDelete: () => _deleteProduct(doc.id, imageUrl),
-                    onEdit: () => _editProduct(doc.id, data),
-                    onToggleVisibility: () => _toggleVisibility(doc.id, data),
-                    onAddToCart: _isStaff ? null : () => _openAddToCart(doc.id, data),
-                  ),
-                );
-              },
-              childCount: filteredDocs.length,
+                  childCount: filteredDocs.length,
+                ),
+              ),
             ),
-          ),
+            if (_catalog.isLoadingMore)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.coral),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         );
-      },
-    );
-  }
-
-  List<QueryDocumentSnapshot> _filterDocs(List<QueryDocumentSnapshot> rawDocs) {
-    final searchQuery = _searchController.text;
-    return rawDocs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      if (!_isStaff && !ProductPermissions.isPublicCatalogItem(data)) return false;
-      return ProductCatalog.matchesFilters(
-            data: data,
-            seasonFilter: selectedSeason,
-            genderFilter: selectedGender,
-            categoryFilter: selectedCategory,
-            saleOnly: saleOnly,
-          ) &&
-          ProductCatalog.matchesSearch(data: data, docId: doc.id, query: searchQuery);
-    }).toList();
   }
 
   String _productImageUrl(Map<String, dynamic> data) {

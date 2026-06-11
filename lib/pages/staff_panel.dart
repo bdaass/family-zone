@@ -8,7 +8,9 @@ import 'package:image_picker/image_picker.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
+import '../services/product_catalog_service.dart';
 import '../utils/image_compressor.dart';
+import '../widgets/size_input_field.dart';
 
 class StaffManagementPanel extends StatefulWidget {
   final String userRole;
@@ -21,8 +23,9 @@ class StaffManagementPanel extends StatefulWidget {
 class _StaffManagementPanelState extends State<StaffManagementPanel> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
-  final _sizeController = TextEditingController();
   final _priceController = TextEditingController();
+  String _sizesEncoded = '';
+  int _sizeInputKey = 0;
   final _soldPriceController = TextEditingController();
 
   Uint8List? _imageBytes;
@@ -63,15 +66,16 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   Future<void> _submitProduct() async {
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
-    final size = _sizeController.text.trim();
+    final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
+    final size = ProductCatalog.encodeSizes(sizes);
     final priceParsed = double.tryParse(_priceController.text.trim());
 
     final soldPriceText = _soldPriceController.text.trim();
     final soldPriceParsed = soldPriceText.isEmpty ? null : double.tryParse(soldPriceText);
 
-    if (title.isEmpty || description.isEmpty || size.isEmpty || priceParsed == null || _imageBytes == null) {
+    if (title.isEmpty || description.isEmpty || sizes.isEmpty || priceParsed == null || _imageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of('staff_validation_required'))),
+        SnackBar(content: Text(sizes.isEmpty ? S.of('sizes_required') : S.of('staff_validation_required'))),
       );
       return;
     }
@@ -114,14 +118,30 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         'approved': isAdmin,
         'sold': false,
         'created_at': FieldValue.serverTimestamp(),
+        ...ProductCatalog.searchIndexFields(
+          title: title,
+          description: description,
+          productId: productId,
+          size: size,
+          price: priceParsed,
+          soldPrice: soldPriceParsed,
+          season: _formSeason,
+          gender: _formGender,
+          type: _formType,
+        ),
       });
+
+      ProductCatalogService.instance.invalidate();
 
       _titleController.clear();
       _descController.clear();
-      _sizeController.clear();
+      setState(() {
+        _sizesEncoded = '';
+        _sizeInputKey++;
+        _imageBytes = null;
+      });
       _priceController.clear();
       _soldPriceController.clear();
-      setState(() => _imageBytes = null);
 
       if (mounted) {
         final message = isAdmin
@@ -245,23 +265,10 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
                       maxLines: 2,
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _sizeController,
-                            decoration: InputDecoration(labelText: S.of('field_size'), isDense: true, hintText: S.of('field_size_hint')),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _priceController,
-                            decoration: InputDecoration(labelText: S.of('field_price'), isDense: true),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          ),
-                        ),
-                      ],
+                    TextField(
+                      controller: _priceController,
+                      decoration: InputDecoration(labelText: S.of('field_price'), isDense: true),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     ),
                     const SizedBox(height: 8),
                     TextField(
@@ -277,6 +284,12 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          SizeInputField(
+            key: ValueKey(_sizeInputKey),
+            dense: true,
+            onEncodedChanged: (value) => _sizesEncoded = value,
           ),
           const SizedBox(height: 16),
           Row(

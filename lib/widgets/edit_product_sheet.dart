@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
+import 'size_input_field.dart';
 
 class EditProductSheet extends StatefulWidget {
   final String productId;
@@ -36,8 +37,8 @@ class EditProductSheet extends StatefulWidget {
 class _EditProductSheetState extends State<EditProductSheet> {
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
-  late final TextEditingController _sizeController;
   late final TextEditingController _priceController;
+  late String _sizesEncoded;
   late final TextEditingController _soldPriceController;
   late String _season;
   late String _gender;
@@ -48,7 +49,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
     super.initState();
     _titleController = TextEditingController(text: widget.title);
     _descController = TextEditingController(text: widget.description);
-    _sizeController = TextEditingController(text: widget.size);
+    _sizesEncoded = widget.size;
     _priceController = TextEditingController(text: widget.price.toStringAsFixed(2));
     _soldPriceController = TextEditingController(
       text: widget.soldPrice != null ? widget.soldPrice!.toStringAsFixed(2) : '',
@@ -64,7 +65,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
   void dispose() {
     _titleController.dispose();
     _descController.dispose();
-    _sizeController.dispose();
     _priceController.dispose();
     _soldPriceController.dispose();
     super.dispose();
@@ -73,13 +73,14 @@ class _EditProductSheetState extends State<EditProductSheet> {
   void _save() {
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
-    final size = _sizeController.text.trim();
+    final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
+    final size = ProductCatalog.encodeSizes(sizes);
     final price = double.tryParse(_priceController.text.trim());
     final soldPriceText = _soldPriceController.text.trim();
     final soldPrice = soldPriceText.isEmpty ? null : double.tryParse(soldPriceText);
-    if (title.isEmpty || description.isEmpty || size.isEmpty || price == null) {
+    if (title.isEmpty || description.isEmpty || sizes.isEmpty || price == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of('edit_validation_required'))),
+        SnackBar(content: Text(sizes.isEmpty ? S.of('sizes_required') : S.of('edit_validation_required'))),
       );
       return;
     }
@@ -97,6 +98,17 @@ class _EditProductSheetState extends State<EditProductSheet> {
       'season': _season,
       'sex': _gender,
       'type': _type,
+      ...ProductCatalog.searchIndexFields(
+        title: title,
+        description: description,
+        productId: widget.productId,
+        size: size,
+        price: price,
+        soldPrice: soldPrice,
+        season: _season,
+        gender: _gender,
+        type: _type,
+      ),
     };
     if (soldPrice == null) {
       result['soldPrice'] = FieldValue.delete();
@@ -132,7 +144,10 @@ class _EditProductSheetState extends State<EditProductSheet> {
             const SizedBox(height: 12),
             TextField(controller: _descController, decoration: InputDecoration(labelText: S.of('field_description')), maxLines: 3),
             const SizedBox(height: 12),
-            TextField(controller: _sizeController, decoration: InputDecoration(labelText: S.of('field_size'))),
+            SizeInputField(
+              initialValue: _sizesEncoded,
+              onEncodedChanged: (value) => _sizesEncoded = value,
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _priceController,
