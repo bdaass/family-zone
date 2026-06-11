@@ -148,6 +148,37 @@ class ProductCatalog {
         matchesType(data['type']?.toString(), categoryFilter);
   }
 
+  /// Matches title, description, product ID, size, and catalog labels.
+  static bool matchesSearch({
+    required Map<String, dynamic> data,
+    required String docId,
+    required String query,
+  }) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+
+    final season = normalizeSeason(data['season']?.toString());
+    final gender = normalizeGender(data['sex']?.toString());
+    final type = normalizeType(data['type']?.toString());
+
+    final haystack = [
+      titleFrom(data),
+      descriptionFrom(data),
+      productIdFrom(data, docId),
+      docId,
+      sizeFrom(data),
+      season,
+      gender,
+      type,
+      localizedCatalogLabel(season),
+      localizedCatalogLabel(gender),
+      localizedCatalogLabel(type),
+    ].join(' ').toLowerCase();
+
+    final tokens = normalized.split(RegExp(r'\s+')).where((token) => token.isNotEmpty);
+    return tokens.every(haystack.contains);
+  }
+
   static String productIdFrom(Map<String, dynamic> data, String docId) {
     final raw = data['productId'] ?? data['id'] ?? docId;
     return raw is String ? raw : raw.toString();

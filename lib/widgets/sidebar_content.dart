@@ -21,6 +21,9 @@ class FilterSidebarContent extends StatelessWidget {
   final VoidCallback? onStaffPanelTap;
   final VoidCallback? onClearFilters;
   final bool showBrand;
+  final bool isLoggedIn;
+  final VoidCallback onSignIn;
+  final VoidCallback? onSignOut;
 
   const FilterSidebarContent({
     super.key,
@@ -36,6 +39,9 @@ class FilterSidebarContent extends StatelessWidget {
     this.onStaffPanelTap,
     this.onClearFilters,
     this.showBrand = false,
+    required this.isLoggedIn,
+    required this.onSignIn,
+    this.onSignOut,
   });
 
   bool get _isStaff => userRole == 'admin' || userRole == 'employee';
@@ -105,7 +111,18 @@ class FilterSidebarContent extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: const SidebarLanguageBar(),
+              child: Column(
+                children: [
+                  SidebarAuthBar(
+                    isLoggedIn: isLoggedIn,
+                    userRole: userRole,
+                    onSignIn: onSignIn,
+                    onSignOut: onSignOut,
+                  ),
+                  const SizedBox(height: 10),
+                  const SidebarLanguageBar(),
+                ],
+              ),
             ),
           ],
         );

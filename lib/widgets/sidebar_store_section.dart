@@ -109,6 +109,66 @@ class SidebarStoreSection extends StatelessWidget {
   }
 }
 
+class SidebarAuthBar extends StatelessWidget {
+  final bool isLoggedIn;
+  final String? userRole;
+  final VoidCallback onSignIn;
+  final VoidCallback? onSignOut;
+
+  const SidebarAuthBar({
+    super.key,
+    required this.isLoggedIn,
+    required this.onSignIn,
+    this.userRole,
+    this.onSignOut,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isLoggedIn) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: onSignIn,
+          icon: const Icon(Icons.person_outline_rounded, size: 18),
+          label: Text(S.of('auth_login_button')),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.ink,
+            foregroundColor: AppColors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.creamDark.withValues(alpha: 0.65)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.person_rounded, size: 18, color: AppColors.inkMuted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              S.roleLabel(userRole ?? 'client'),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.ink),
+            ),
+          ),
+          TextButton(
+            onPressed: onSignOut,
+            child: Text(S.of('auth_sign_out'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SidebarLanguageBar extends StatelessWidget {
   const SidebarLanguageBar({super.key});
 

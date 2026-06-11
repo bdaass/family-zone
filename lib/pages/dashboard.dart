@@ -45,6 +45,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   final GlobalKey _staffPanelKey = GlobalKey();
   final GlobalKey _collectionKey = GlobalKey();
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
 
   late AnimationController _entranceController;
   late Animation<double> _fadeAnimation;
@@ -78,7 +79,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     CartService.instance.removeListener(_onCartChanged);
     _entranceController.dispose();
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _clearSearch() {
+    if (_searchController.text.isEmpty) return;
+    _searchController.clear();
+    setState(() {});
   }
 
   void _listenToAuthState() {
@@ -467,6 +475,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       onSaleOnlyChanged: (v) => setState(() => saleOnly = v),
       onClearFilters: _resetFilters,
       onStaffPanelTap: onStaffTap,
+      isLoggedIn: userRole != 'guest',
+      onSignIn: _showAuthModal,
+      onSignOut: () => FirebaseAuth.instance.signOut(),
     );
   }
 
@@ -644,12 +655,22 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 border: Border.all(color: AppColors.creamDark),
               ),
               child: TextField(
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                textInputAction: TextInputAction.search,
                 textAlignVertical: TextAlignVertical.center,
                 style: const TextStyle(color: AppColors.ink, fontSize: 13),
                 decoration: InputDecoration(
                   hintText: S.of('search_hint'),
                   hintStyle: const TextStyle(color: AppColors.inkMuted, fontSize: 13),
                   prefixIcon: const Icon(Icons.search_rounded, color: AppColors.inkMuted, size: 18),
+                  suffixIcon: _searchController.text.trim().isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: S.of('clear'),
+                          onPressed: _clearSearch,
+                          icon: const Icon(Icons.close_rounded, color: AppColors.inkMuted, size: 18),
+                        ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsetsDirectional.symmetric(vertical: 10, horizontal: 4),
                   isDense: true,
@@ -702,6 +723,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         final filteredDocs = _filterDocs(snapshot.data?.docs ?? []);
 
         if (filteredDocs.isEmpty) {
+          final hasSearch = _searchController.text.trim().isNotEmpty;
           return SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
@@ -709,17 +731,24 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.inventory_2_outlined, size: 40, color: AppColors.inkMuted.withValues(alpha: 0.4)),
+                    Icon(
+                      hasSearch ? Icons.search_off_rounded : Icons.inventory_2_outlined,
+                      size: 40,
+                      color: AppColors.inkMuted.withValues(alpha: 0.4),
+                    ),
                     const SizedBox(height: 12),
                     Text(
-                      S.of('no_filter_results'),
+                      hasSearch ? S.of('no_search_results') : S.of('no_filter_results'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.inkMuted),
                     ),
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: _resetFilters,
-                      child: Text(S.of('reset_filters'), style: const TextStyle(color: AppColors.coral)),
+                      onPressed: hasSearch ? _clearSearch : _resetFilters,
+                      child: Text(
+                        hasSearch ? S.of('clear') : S.of('reset_filters'),
+                        style: const TextStyle(color: AppColors.coral),
+                      ),
                     ),
                   ],
                 ),
@@ -745,7 +774,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 final data = doc.data() as Map<String, dynamic>;
                 final imageUrl = _productImageUrl(data);
                 return TweenAnimationBuilder<double>(
-                  key: ValueKey('${doc.id}-$selectedSeason-$selectedGender-$selectedCategory-$saleOnly'),
+                  key: ValueKey('${doc.id}-$selectedSeason-$selectedGender-$selectedCategory-$saleOnly-${_searchController.text}'),
                   duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
                   tween: Tween(begin: 0.0, end: 1.0),
                   curve: Curves.easeOutCubic,
@@ -797,16 +826,18 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   List<QueryDocumentSnapshot> _filterDocs(List<QueryDocumentSnapshot> rawDocs) {
+    final searchQuery = _searchController.text;
     return rawDocs.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       if (!_isStaff && !ProductPermissions.isPublicCatalogItem(data)) return false;
       return ProductCatalog.matchesFilters(
-        data: data,
-        seasonFilter: selectedSeason,
-        genderFilter: selectedGender,
-        categoryFilter: selectedCategory,
-        saleOnly: saleOnly,
-      );
+            data: data,
+            seasonFilter: selectedSeason,
+            genderFilter: selectedGender,
+            categoryFilter: selectedCategory,
+            saleOnly: saleOnly,
+          ) &&
+          ProductCatalog.matchesSearch(data: data, docId: doc.id, query: searchQuery);
     }).toList();
   }
 
