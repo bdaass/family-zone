@@ -48,6 +48,18 @@ service cloud.firestore {
     return request.resource.data.diff(resource.data).affectedKeys().hasAny(['visibility', 'approved']);
   }
 
+  function favoriteCountDeltaValid() {
+    let oldCount = resource.data.get('favoriteCount', 0);
+    let newCount = request.resource.data.favoriteCount;
+    return newCount >= 0
+      && (newCount == oldCount + 1 || newCount == oldCount - 1);
+  }
+
+  // ── Internal rate-limit docs (Cloud Functions only) ──────────────────────
+  match /_rate_limits/{docId} {
+    allow read, write: if false;
+  }
+
   // ── Users ────────────────────────────────────────────────────────────────
   match /users/{userId} {
     allow read: if isOwner(userId);
@@ -82,23 +94,17 @@ service cloud.firestore {
 
     allow update: if isAdmin()
       || (isEmployee() && !employeeChangedModerationFields())
-      || (isSignedIn() && onlyFieldsChanged(['favoriteCount']));
+      || (isSignedIn()
+        && onlyFieldsChanged(['favoriteCount'])
+        && favoriteCountDeltaValid());
 
   }
 
-  // ── Contact form ─────────────────────────────────────────────────────────
+  // ── Contact form (writes via Cloud Function only) ────────────────────────
   match /contact_messages/{messageId} {
     allow read: if isStaff();
 
-    allow create: if request.resource.data.message is string
-      && request.resource.data.message.size() > 0
-      && request.resource.data.message.size() <= 2000
-      && request.resource.data.anonymous is bool
-      && (
-        !('userId' in request.resource.data)
-        || request.resource.data.userId == null
-        || (isSignedIn() && request.resource.data.userId == request.auth.uid)
-      );
+    allow create: if false;
 
     allow update, delete: if isAdmin();
   }

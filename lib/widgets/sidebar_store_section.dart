@@ -6,6 +6,7 @@ import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../services/locale_service.dart';
 import '../theme/app_theme.dart';
+import '../pages/privacy_policy_page.dart';
 import 'contact_form_sheet.dart';
 
 class SidebarStoreSection extends StatelessWidget {
@@ -100,6 +101,17 @@ class SidebarStoreSection extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => PrivacyPolicyPage.open(context),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.inkMuted,
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(S.of('privacy_policy_link')),
               ),
             ],
           ),

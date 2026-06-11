@@ -63,6 +63,10 @@ class _ContactFormSheetState extends State<ContactFormSheet> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('message_sent'))));
+    } on StateError catch (e) {
+      if (!mounted) return;
+      final text = e.message == 'rate_limited' ? S.of('message_rate_limited') : S.of('message_failed');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('message_failed'))));

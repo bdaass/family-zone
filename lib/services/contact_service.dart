@@ -1,5 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class ContactService {
   static Future<void> submitMessage({
@@ -9,20 +8,27 @@ class ContactService {
     String? email,
     String? phone,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
     final trimmed = message.trim();
     if (trimmed.isEmpty) {
       throw ArgumentError('Message cannot be empty');
     }
 
-    await FirebaseFirestore.instance.collection('contact_messages').add({
-      'message': trimmed,
-      'anonymous': anonymous,
-      'name': anonymous ? null : name?.trim(),
-      'email': anonymous ? null : email?.trim(),
-      'phone': anonymous ? null : phone?.trim(),
-      'userId': anonymous ? null : user?.uid,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    final callable = FirebaseFunctions.instance.httpsCallable('submitContactMessage');
+    try {
+      await callable.call<Map<String, dynamic>>({
+        'message': trimmed,
+        'anonymous': anonymous,
+        if (!anonymous) ...{
+          'name': name?.trim(),
+          'email': email?.trim(),
+          'phone': phone?.trim(),
+        },
+      });
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'resource-exhausted') {
+        throw StateError('rate_limited');
+      }
+      rethrow;
+    }
   }
 }

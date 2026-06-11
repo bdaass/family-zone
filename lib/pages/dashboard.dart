@@ -254,12 +254,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _reloadCatalog();
   }
 
-  bool get _hasActiveFilters =>
-      selectedSeason != 'All Seasons' ||
-      selectedGender != 'All' ||
-      selectedCategory != 'All Categories' ||
-      saleOnly;
-
   int get _activeFilterCount {
     var count = 0;
     if (selectedSeason != 'All Seasons') count++;

@@ -72,3 +72,15 @@ android/build/
 # Ensure web/hosting builds are ignored if you build for web
 **/build/
 **/.dart_tool/
+
+# Firebase CLI logs
+firebase-debug.log
+firebase-debug.*.log
+
+# Cloud Functions dependencies
+functions/node_modules/
+
+# Android release signing (never commit secrets)
+android/key.properties
+**/*.jks
+**/*.keystore
