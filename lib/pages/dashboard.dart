@@ -1,0 +1,842 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+
+import '../config/store_config.dart';
+import '../l10n/app_strings.dart';
+import '../models/product_catalog.dart';
+import '../services/favorite_service.dart';
+import '../theme/app_theme.dart';
+import '../utils/product_permissions.dart';
+import '../widgets/ambient_background.dart';
+import '../widgets/dashboard_hero.dart';
+import '../widgets/family_zone_brand.dart';
+import '../widgets/edit_product_sheet.dart';
+import '../widgets/add_to_cart_sheet.dart';
+import '../widgets/product_detail_sheet.dart';
+import '../widgets/cart_sheet.dart';
+import '../widgets/favorites_sheet.dart';
+import '../widgets/filter_bottom_sheet.dart';
+import '../services/cart_service.dart';
+import '../services/locale_service.dart';
+import '../services/order_service.dart';
+import '../widgets/sidebar_content.dart';
+import '../widgets/product_card.dart';
+import 'auth_modal.dart';
+import 'staff_panel.dart';
+
+class DashboardPage extends StatefulWidget {
+  const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> with TickerProviderStateMixin {
+  String userRole = 'guest';
+  String selectedSeason = 'All Seasons';
+  String selectedGender = 'All';
+  String selectedCategory = 'All Categories';
+  bool saleOnly = false;
+  Set<String> _likedProductIds = {};
+
+  final GlobalKey _staffPanelKey = GlobalKey();
+  final GlobalKey _collectionKey = GlobalKey();
+  final ScrollController _scrollController = ScrollController();
+
+  late AnimationController _entranceController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToAuthState();
+
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+
+    _fadeAnimation = CurvedAnimation(parent: _entranceController, curve: Curves.easeOutCubic);
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero).animate(
+      CurvedAnimation(parent: _entranceController, curve: Curves.easeOutCubic),
+    );
+
+    _entranceController.forward();
+    CartService.instance.addListener(_onCartChanged);
+  }
+
+  void _onCartChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    CartService.instance.removeListener(_onCartChanged);
+    _entranceController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _listenToAuthState() {
+    FirebaseAuth.instance.authStateChanges().listen((User? user) async {
+      if (user == null) {
+        if (mounted) setState(() {
+          userRole = 'guest';
+          _likedProductIds = {};
+        });
+      } else {
+        await _createUserProfileIfNew(user);
+        await _fetchUserRole(user.uid);
+        _listenToUserLikes(user.uid);
+      }
+    });
+  }
+
+  Future<void> _createUserProfileIfNew(User user) async {
+    try {
+      final userDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final docSnapshot = await userDocRef.get();
+      if (!docSnapshot.exists) {
+        await userDocRef.set({
+          'uid': user.uid,
+          'name': user.displayName ?? user.email?.split('@')[0] ?? S.of('default_client_name'),
+          'email': user.email,
+          'role': 'client',
+          'created_at': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('Error auto-initializing profile document: $e');
+    }
+  }
+
+  Future<void> _fetchUserRole(String uid) async {
+    try {
+      FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((doc) {
+        if (doc.exists && doc.data() != null && mounted) {
+          setState(() => userRole = doc.data()!['role'] ?? 'client');
+        }
+      });
+    } catch (e) {
+      debugPrint('Role acquisition sync disrupted: $e');
+    }
+  }
+
+  bool get _isStaff => ProductPermissions.isStaff(userRole);
+
+  bool get _isClient => ProductPermissions.isClient(userRole);
+
+  void _listenToUserLikes(String uid) {
+    FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((doc) {
+      if (mounted) {
+        setState(() {
+          _likedProductIds = Set<String>.from(doc.data()?['likedProducts'] ?? []);
+        });
+      }
+    });
+  }
+
+  Future<void> _toggleFavorite(String docId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showAuthModal();
+      return;
+    }
+    try {
+      await FavoriteService.toggle(docId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('favorite_update_failed', {'error': '$e'}))));
+      }
+    }
+  }
+
+  void _resetFilters() {
+    setState(() {
+      selectedSeason = 'All Seasons';
+      selectedGender = 'All';
+      selectedCategory = 'All Categories';
+      saleOnly = false;
+    });
+  }
+
+  bool get _hasActiveFilters =>
+      selectedSeason != 'All Seasons' ||
+      selectedGender != 'All' ||
+      selectedCategory != 'All Categories' ||
+      saleOnly;
+
+  int get _activeFilterCount {
+    var count = 0;
+    if (selectedSeason != 'All Seasons') count++;
+    if (selectedGender != 'All') count++;
+    if (selectedCategory != 'All Categories') count++;
+    if (saleOnly) count++;
+    return count;
+  }
+
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => FilterBottomSheet(
+        initialSeason: selectedSeason,
+        initialGender: selectedGender,
+        initialCategory: selectedCategory,
+        initialSaleOnly: saleOnly,
+        onApply: (season, gender, category, onlySale) {
+          setState(() {
+            selectedSeason = season;
+            selectedGender = gender;
+            selectedCategory = category;
+            saleOnly = onlySale;
+          });
+        },
+      ),
+    );
+  }
+
+  Future<void> _deleteProduct(String docId, String imageUrl) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.of('delete_confirm_title')),
+        content: Text(S.of('delete_confirm_body')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.of('cancel'))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: Text(S.of('delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      if (imageUrl.isNotEmpty) {
+        try {
+          await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+        } catch (_) {}
+      }
+      await FirebaseFirestore.instance.collection('products').doc(docId).delete();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('item_deleted'))));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('delete_failed', {'error': '$e'}))));
+      }
+    }
+  }
+
+  Future<void> _editProduct(String docId, Map<String, dynamic> data) async {
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => EditProductSheet(
+        productId: ProductCatalog.productIdFrom(data, docId),
+        title: ProductCatalog.titleFrom(data),
+        description: ProductCatalog.descriptionFrom(data),
+        size: ProductCatalog.sizeFrom(data),
+        price: ProductCatalog.priceFrom(data),
+        soldPrice: ProductCatalog.soldPriceFrom(data),
+        season: (data['season'] ?? 'summer').toString(),
+        gender: (data['sex'] ?? 'woman').toString(),
+        type: (data['type'] ?? 'clothes').toString(),
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('products').doc(docId).update(result);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('item_updated'))));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('update_failed', {'error': '$e'}))));
+      }
+    }
+  }
+
+  Future<void> _toggleVisibility(String docId, Map<String, dynamic> data) async {
+    final currentlyVisible = ProductPermissions.isVisible(data);
+    final newVisibility = !currentlyVisible;
+
+    try {
+      final update = <String, dynamic>{'visibility': newVisibility};
+      if (newVisibility && ProductPermissions.isPendingApproval(data)) {
+        update['approved'] = true;
+      }
+      await FirebaseFirestore.instance.collection('products').doc(docId).update(update);
+      if (mounted) {
+        final msg = newVisibility ? S.of('item_now_visible') : S.of('item_now_hidden');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('update_failed', {'error': '$e'}))));
+      }
+    }
+  }
+
+  void _showFavoritesSheet() {
+    FavoritesSheet.show(context);
+  }
+
+  void _showCartSheet() {
+    CartSheet.show(context);
+  }
+
+  Future<void> _contactViaWhatsApp() async {
+    final result = await OrderService.contactViaWhatsApp();
+    if (!mounted) return;
+
+    switch (result) {
+      case WhatsAppLaunchResult.opened:
+        break;
+      case WhatsAppLaunchResult.copiedToClipboard:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              S.fmt('whatsapp_message_copied', {'phone': StoreConfig.storeDisplayNumber}),
+            ),
+          ),
+        );
+      case WhatsAppLaunchResult.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of('whatsapp_open_failed'))),
+        );
+    }
+  }
+
+  void _openAddToCart(String docId, Map<String, dynamic> data) {
+    AddToCartSheet.show(
+      context,
+      productDocId: docId,
+      productId: ProductCatalog.productIdFrom(data, docId),
+      title: ProductCatalog.titleFrom(data),
+      imageUrl: _productImageUrl(data),
+      sizeField: ProductCatalog.sizeFrom(data),
+      price: ProductCatalog.priceFrom(data),
+      soldPrice: ProductCatalog.soldPriceFrom(data),
+    );
+  }
+
+  void _openProductDetail(String docId, Map<String, dynamic> data) {
+    ProductDetailSheet.show(
+      context,
+      productId: ProductCatalog.productIdFrom(data, docId),
+      title: ProductCatalog.titleFrom(data),
+      description: ProductCatalog.descriptionFrom(data),
+      imageUrl: _productImageUrl(data),
+      sizeField: ProductCatalog.sizeFrom(data),
+      price: ProductCatalog.priceFrom(data),
+      soldPrice: ProductCatalog.soldPriceFrom(data),
+      seasonLabel: ProductCatalog.localizedCatalogLabel((data['season'] ?? '').toString()),
+      genderLabel: ProductCatalog.localizedCatalogLabel(ProductCatalog.normalizeGender(data['sex']?.toString())),
+      typeLabel: ProductCatalog.localizedCatalogLabel(ProductCatalog.normalizeType(data['type']?.toString())),
+      favoriteCount: ProductCatalog.favoriteCountFrom(data),
+      isFavorited: _likedProductIds.contains(docId),
+      isSoldOut: data['sold'] ?? false,
+      showProductId: _isStaff,
+      onFavoriteToggle: _isClient ? () => _toggleFavorite(docId) : null,
+      onAddToCart: _isStaff || (data['sold'] ?? false) ? null : () => _openAddToCart(docId, data),
+    );
+  }
+
+  void _showAuthModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => const AuthModalSheet(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: LocaleService.instance,
+      builder: (context, _) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final useInlineSidebar = kIsWeb && screenWidth > 900;
+        final showDrawer = !useInlineSidebar;
+        final user = FirebaseAuth.instance.currentUser;
+        final isWide = screenWidth > 600;
+
+        return Scaffold(
+      backgroundColor: AppColors.cream,
+      appBar: _buildAppBar(context, user, showDrawer),
+      drawer: showDrawer ? _buildDrawer() : null,
+      body: Stack(
+        children: [
+          const AmbientBackground(),
+          Row(
+            children: [
+              if (useInlineSidebar) _buildSidebar(),
+              Expanded(
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: CustomScrollView(
+                      controller: _scrollController,
+                      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                      slivers: [
+                        if (userRole == 'admin' || userRole == 'employee')
+                          SliverToBoxAdapter(
+                            key: _staffPanelKey,
+                            child: StaffManagementPanel(userRole: userRole),
+                          ),
+                        SliverToBoxAdapter(
+                          child: DashboardHero(
+                            key: ValueKey(LocaleService.instance.languageCode),
+                            isWide: isWide,
+                            onContactTap: _contactViaWhatsApp,
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          key: _collectionKey,
+                          child: _buildCollectionHeader(isWide, useInlineSidebar),
+                        ),
+                        _buildProductGrid(isWide),
+                        const SliverToBoxAdapter(child: SizedBox(height: 60)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+      },
+    );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: AppColors.cream,
+      child: SafeArea(
+        child: _sidebarContent(showBrand: true, onStaffTap: () {
+          Navigator.pop(context);
+          _scrollToStaffPanel();
+        }),
+      ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 268,
+      decoration: BoxDecoration(
+        color: AppColors.white.withValues(alpha: 0.92),
+        border: Border(right: BorderSide(color: AppColors.creamDark.withValues(alpha: 0.8))),
+      ),
+      child: _sidebarContent(showBrand: false, onStaffTap: _scrollToStaffPanel),
+    );
+  }
+
+  Widget _sidebarContent({required bool showBrand, VoidCallback? onStaffTap}) {
+    return FilterSidebarContent(
+      userRole: userRole,
+      showBrand: showBrand,
+      currentSeason: selectedSeason,
+      currentGender: selectedGender,
+      currentCategory: selectedCategory,
+      saleOnly: saleOnly,
+      onSeasonChanged: (v) => setState(() => selectedSeason = v),
+      onGenderChanged: (v) => setState(() => selectedGender = v),
+      onCategoryChanged: (v) => setState(() => selectedCategory = v),
+      onSaleOnlyChanged: (v) => setState(() => saleOnly = v),
+      onClearFilters: _resetFilters,
+      onStaffPanelTap: onStaffTap,
+    );
+  }
+
+  void _scrollToStaffPanel() {
+    final context = _staffPanelKey.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  PreferredSizeWidget _buildAppBar(BuildContext context, User? user, bool showDrawer) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final compact = MediaQuery.sizeOf(context).width < 420;
+    final iconSize = compact ? 20.0 : 22.0;
+    final iconConstraints = BoxConstraints(minWidth: compact ? 36 : 40, minHeight: compact ? 36 : 40);
+
+    return PreferredSize(
+      preferredSize: Size.fromHeight(kToolbarHeight + topInset),
+      child: Material(
+        color: AppColors.white.withValues(alpha: 0.82),
+        elevation: 0,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.creamDark.withValues(alpha: 0.7))),
+            boxShadow: AppColors.elevationShadow(opacity: 0.04, blur: 18, y: 6),
+          ),
+          child: Padding(
+            padding: EdgeInsets.only(top: topInset),
+            child: Builder(
+              builder: (barContext) {
+                return SizedBox(
+                  height: kToolbarHeight,
+                  child: Padding(
+                    padding: EdgeInsetsDirectional.only(start: showDrawer ? 2 : 12, end: compact ? 4 : 8),
+                    child: Row(
+                      children: [
+                        if (showDrawer)
+                          IconButton(
+                            tooltip: S.of('browse_shop'),
+                            onPressed: () => Scaffold.of(barContext).openDrawer(),
+                            icon: Icon(Icons.menu_rounded, color: AppColors.ink, size: compact ? 22 : 24),
+                            constraints: iconConstraints,
+                            padding: EdgeInsets.zero,
+                          )
+                        else
+                          const SizedBox(width: 12),
+                        Expanded(
+                          child: Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: compact
+                                ? FamilyZoneBrand.logoOnly(
+                                    key: ValueKey('logo-${LocaleService.instance.languageCode}'),
+                                    size: 32,
+                                  )
+                                : FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: AlignmentDirectional.centerStart,
+                                    child: FamilyZoneBrand.compact(key: ValueKey(LocaleService.instance.languageCode)),
+                                  ),
+                          ),
+                        ),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          reverse: false,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                constraints: iconConstraints,
+                                padding: EdgeInsets.zero,
+                                tooltip: S.of('tooltip_whatsapp'),
+                                onPressed: _contactViaWhatsApp,
+                                icon: Icon(Icons.chat_rounded, color: const Color(0xFF25D366), size: iconSize),
+                              ),
+                              if (!_isStaff)
+                                IconButton(
+                                  constraints: iconConstraints,
+                                  padding: EdgeInsets.zero,
+                                  tooltip: S.of('tooltip_cart'),
+                                  onPressed: _showCartSheet,
+                                  icon: Badge(
+                                    isLabelVisible: CartService.instance.itemCount > 0,
+                                    label: Text('${CartService.instance.itemCount}'),
+                                    child: Icon(Icons.shopping_bag_outlined, color: AppColors.ink, size: iconSize),
+                                  ),
+                                ),
+                              if (_isClient && user != null)
+                                IconButton(
+                                  constraints: iconConstraints,
+                                  padding: EdgeInsets.zero,
+                                  tooltip: S.of('tooltip_favorites'),
+                                  onPressed: _showFavoritesSheet,
+                                  icon: Badge(
+                                    isLabelVisible: _likedProductIds.isNotEmpty,
+                                    label: Text('${_likedProductIds.length}'),
+                                    child: Icon(Icons.favorite_border_rounded, color: AppColors.coral, size: iconSize),
+                                  ),
+                                ),
+                              if (userRole != 'guest' && !compact)
+                                Padding(
+                                  padding: const EdgeInsetsDirectional.symmetric(horizontal: 4),
+                                  child: Text(
+                                    S.roleLabel(userRole),
+                                    style: const TextStyle(
+                                      color: AppColors.inkMuted,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
+                              IconButton(
+                                constraints: iconConstraints,
+                                padding: EdgeInsets.zero,
+                                tooltip: user == null ? S.of('auth_sign_in_title') : S.of('auth_login_button'),
+                                icon: Icon(
+                                  user == null ? Icons.person_outline_rounded : Icons.logout_rounded,
+                                  color: AppColors.ink,
+                                  size: iconSize,
+                                ),
+                                onPressed: () {
+                                  if (user == null) {
+                                    _showAuthModal();
+                                  } else {
+                                    FirebaseAuth.instance.signOut();
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCollectionHeader(bool isWide, bool useInlineSidebar) {
+    return Padding(
+      padding: EdgeInsetsDirectional.fromSTEB(isWide ? 20 : 16, 8, isWide ? 20 : 16, 4),
+      child: Row(
+        children: [
+          Flexible(
+            flex: isWide ? 0 : 1,
+            child: Text(
+              S.of('shop'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: isWide ? 22 : 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.6,
+                color: AppColors.ink,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 4,
+            child: Container(
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.white.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.creamDark),
+              ),
+              child: TextField(
+                textAlignVertical: TextAlignVertical.center,
+                style: const TextStyle(color: AppColors.ink, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: S.of('search_hint'),
+                  hintStyle: const TextStyle(color: AppColors.inkMuted, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search_rounded, color: AppColors.inkMuted, size: 18),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsetsDirectional.symmetric(vertical: 10, horizontal: 4),
+                  isDense: true,
+                ),
+              ),
+            ),
+          ),
+          if (!useInlineSidebar) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              child: _FilterButton(activeCount: _activeFilterCount, onTap: _showFilterSheet),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductGrid(bool isWide) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('products').orderBy('created_at', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 64),
+              child: Center(
+                child: Text(S.of('products_load_error'), style: const TextStyle(color: AppColors.inkMuted)),
+              ),
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 64),
+              child: Center(
+                child: kIsWeb
+                    ? Text(S.of('products_loading'), style: const TextStyle(color: AppColors.inkMuted))
+                    : const SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.coral),
+                      ),
+              ),
+            ),
+          );
+        }
+
+        final filteredDocs = _filterDocs(snapshot.data?.docs ?? []);
+
+        if (filteredDocs.isEmpty) {
+          return SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.inventory_2_outlined, size: 40, color: AppColors.inkMuted.withValues(alpha: 0.4)),
+                    const SizedBox(height: 12),
+                    Text(
+                      S.of('no_filter_results'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.inkMuted),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _resetFilters,
+                      child: Text(S.of('reset_filters'), style: const TextStyle(color: AppColors.coral)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        final cardAspectRatio = isWide ? 0.58 : 0.42;
+
+        return SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: isWide ? 20 : 12, vertical: 8),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: isWide ? 280 : 220,
+              mainAxisSpacing: isWide ? 24 : 18,
+              crossAxisSpacing: isWide ? 20 : 12,
+              childAspectRatio: cardAspectRatio,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final doc = filteredDocs[index];
+                final data = doc.data() as Map<String, dynamic>;
+                final imageUrl = _productImageUrl(data);
+                return TweenAnimationBuilder<double>(
+                  key: ValueKey('${doc.id}-$selectedSeason-$selectedGender-$selectedCategory-$saleOnly'),
+                  duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    return Opacity(
+                      opacity: value,
+                      child: Transform.translate(
+                        offset: Offset(0, 24 * (1 - value)),
+                        child: Transform.scale(
+                          scale: 0.92 + (0.08 * value),
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
+                  child: ProductCardItem(
+                    imageUrl: imageUrl,
+                    title: ProductCatalog.titleFrom(data),
+                    description: ProductCatalog.descriptionFrom(data),
+                    size: ProductCatalog.sizeFrom(data),
+                    productId: ProductCatalog.productIdFrom(data, doc.id),
+                    price: ProductCatalog.priceFrom(data),
+                    soldPrice: ProductCatalog.soldPriceFrom(data),
+                    favoriteCount: ProductCatalog.favoriteCountFrom(data),
+                    isFavorited: _likedProductIds.contains(doc.id),
+                    onTap: () => _openProductDetail(doc.id, data),
+                    onFavoriteToggle: () => _toggleFavorite(doc.id),
+                    showProductId: _isStaff,
+                    isSoldOut: data['sold'] ?? false,
+                    isHidden: !ProductPermissions.isVisible(data),
+                    isPendingApproval: ProductPermissions.isPendingApproval(data),
+                    showStaffActions: _isStaff,
+                    canDelete: ProductPermissions.canDelete(userRole),
+                    canEdit: ProductPermissions.canEdit(userRole),
+                    canToggleVisibility: ProductPermissions.canToggleVisibility(userRole),
+                    onDelete: () => _deleteProduct(doc.id, imageUrl),
+                    onEdit: () => _editProduct(doc.id, data),
+                    onToggleVisibility: () => _toggleVisibility(doc.id, data),
+                    onAddToCart: _isStaff ? null : () => _openAddToCart(doc.id, data),
+                  ),
+                );
+              },
+              childCount: filteredDocs.length,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<QueryDocumentSnapshot> _filterDocs(List<QueryDocumentSnapshot> rawDocs) {
+    return rawDocs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (!_isStaff && !ProductPermissions.isPublicCatalogItem(data)) return false;
+      return ProductCatalog.matchesFilters(
+        data: data,
+        seasonFilter: selectedSeason,
+        genderFilter: selectedGender,
+        categoryFilter: selectedCategory,
+        saleOnly: saleOnly,
+      );
+    }).toList();
+  }
+
+  String _productImageUrl(Map<String, dynamic> data) {
+    final raw = data['imageUrl'] ?? data['image_url'] ?? data['image'] ?? '';
+    return raw is String ? raw.trim() : raw.toString().trim();
+  }
+
+}
+
+class _FilterButton extends StatelessWidget {
+  final int activeCount;
+  final VoidCallback onTap;
+
+  const _FilterButton({required this.activeCount, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = activeCount > 0 ? S.fmt('filters_button_count', {'count': '$activeCount'}) : S.of('filters_button');
+
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: const Icon(Icons.tune_rounded, size: 18),
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.ink,
+        side: const BorderSide(color: AppColors.creamDark),
+        padding: const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      ),
+    );
+  }
+}
