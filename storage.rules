@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Role is synced to Auth custom claims by functions/syncUserRoleToClaims.
+    function userRole() {
+      return request.auth.token.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    function isStaff() {
+      return isSignedIn() && userRole() in ['admin', 'employee'];
+    }
+
+    function isValidProductImage() {
+      return request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+    }
+
+    match /product_images/{fileName} {
+      allow read: if true;
+
+      allow create: if isStaff()
+        && isValidProductImage()
+        && fileName.matches('^[A-Za-z0-9]+\\.jpg$');
+
+      allow update: if isStaff() && isValidProductImage();
+
+      allow delete: if isAdmin();
+    }
+
+  }
+}

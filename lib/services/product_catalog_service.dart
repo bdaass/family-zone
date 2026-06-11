@@ -169,11 +169,11 @@ class ProductCatalogService extends ChangeNotifier {
     } on FirebaseException catch (e) {
       if (e.code != 'failed-precondition' || _usesSimpleBrowse(q)) rethrow;
       debugPrint('ProductCatalogService: missing Firestore index, using simple browse query.');
-      return _simpleBrowseQuery(startAfter: startAfter).get();
+      return _simpleBrowseQuery(q: q, startAfter: startAfter).get();
     }
   }
 
-  /// Default shop view — no composite index required; filters run client-side.
+  /// Default shop view — filters run client-side; guests only query public items.
   bool _usesSimpleBrowse(CatalogQuery q) {
     return q.searchQuery.trim().isEmpty &&
         q.seasonFilter == 'All Seasons' &&
@@ -182,12 +182,17 @@ class ProductCatalogService extends ChangeNotifier {
         !q.saleOnly;
   }
 
+  /// Guests must constrain queries to [visibility == true] so Firestore security
+  /// rules allow the list request (rules are not filters).
   Query<Map<String, dynamic>> _simpleBrowseQuery({
+    required CatalogQuery q,
     required QueryDocumentSnapshot<Map<String, dynamic>>? startAfter,
   }) {
-    var query = FirebaseFirestore.instance
-        .collection('products')
-        .orderBy('created_at', descending: true);
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection('products');
+    if (!q.staffMode) {
+      query = query.where('visibility', isEqualTo: true);
+    }
+    query = query.orderBy('created_at', descending: true);
     if (startAfter != null) {
       query = query.startAfterDocument(startAfter);
     }
@@ -199,7 +204,7 @@ class ProductCatalogService extends ChangeNotifier {
     required QueryDocumentSnapshot<Map<String, dynamic>>? startAfter,
   }) {
     if (_usesSimpleBrowse(q)) {
-      return _simpleBrowseQuery(startAfter: startAfter);
+      return _simpleBrowseQuery(q: q, startAfter: startAfter);
     }
 
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection('products');
