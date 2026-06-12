@@ -251,8 +251,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         _likedProductIds = Set<String>.from(data['likedProducts'] ?? []);
       });
       _authResolved = true;
-      // Refresh JWT so Storage rules see the role custom claim.
-      unawaited(FirebaseAuth.instance.currentUser?.getIdToken(true));
       if (staffModeChanged) _reloadCatalog();
     });
   }

@@ -1,39 +1,34 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Ensures Firebase Auth custom claims (role) are fresh before Storage writes.
+/// Client-side guard before Storage uploads.
 ///
-/// Storage rules use `request.auth.token.role`, synced from Firestore by
-/// `syncUserRoleToClaims`. After an admin role is assigned, the user must
-/// refresh their ID token (sign out/in, or [prepareForUpload]).
+/// Storage rules authorize staff using the Firestore `users/{uid}.role` field
+/// (same as [firestore.rules]), not JWT custom claims.
 class StaffStorageAuth {
-  static const _maxAttempts = 3;
-  static const _retryDelay = Duration(milliseconds: 800);
-
-  /// Refreshes the ID token and verifies the `role` claim is staff.
+  /// Verifies the signed-in user has a staff role in Firestore.
   static Future<void> prepareForUpload() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw FirebaseAuthException(code: 'user-not-signed-in', message: 'Sign in required to upload.');
     }
 
-    Object? lastError;
-
-    for (var attempt = 0; attempt < _maxAttempts; attempt++) {
-      await user.getIdToken(true);
-      final role = (await user.getIdTokenResult()).claims?['role'] as String?;
-
-      if (role == 'admin' || role == 'employee') return;
-
-      lastError = role;
-      if (attempt < _maxAttempts - 1) {
-        await Future<void>.delayed(_retryDelay);
-      }
+    final role = await _firestoreRole(user.uid);
+    if (role == null) {
+      throw FirebaseAuthException(code: 'profile-missing', message: 'User profile not found in Firestore.');
     }
 
-    throw FirebaseAuthException(
-      code: 'staff-claim-missing',
-      message: 'Your staff permissions are not active yet (role: $lastError). '
-          'Sign out and sign back in, or wait a minute after an admin assigns your role.',
-    );
+    if (role != 'admin' && role != 'employee') {
+      throw FirebaseAuthException(
+        code: 'staff-role-required',
+        message: 'Only staff can upload. Your Firestore role is "$role" (expected admin or employee).',
+      );
+    }
+  }
+
+  static Future<String?> _firestoreRole(String uid) async {
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    if (!doc.exists) return null;
+    return doc.data()?['role']?.toString() ?? 'client';
   }
 }

@@ -7,17 +7,25 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Role is synced to Auth custom claims by functions/syncUserRoleToClaims.
+    // Same source of truth as firestore.rules — not JWT custom claims.
+    function userDocPath() {
+      return /databases/(default)/documents/users/$(request.auth.uid);
+    }
+
+    function userExists() {
+      return isSignedIn() && firestore.exists(userDocPath());
+    }
+
     function userRole() {
-      return request.auth.token.role;
+      return firestore.get(userDocPath()).data.role;
     }
 
     function isAdmin() {
-      return isSignedIn() && userRole() == 'admin';
+      return userExists() && userRole() == 'admin';
     }
 
     function isStaff() {
-      return isSignedIn() && userRole() in ['admin', 'employee'];
+      return userExists() && userRole() in ['admin', 'employee'];
     }
 
     function isValidProductImage() {
@@ -42,7 +50,6 @@ service firebase.storage {
       allow delete: if isAdmin();
     }
 
-    // Wildcard so getDownloadURL and listAll both work on folder prefixes.
     match /topSlider/{allPaths=**} {
       allow read: if true;
       allow write: if isStaff() && isValidSliderImage();

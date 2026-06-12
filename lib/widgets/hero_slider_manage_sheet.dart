@@ -58,9 +58,8 @@ class _HeroSliderManageSheetState extends State<HeroSliderManageSheet> {
   void initState() {
     super.initState();
     _size = widget.initialSize;
-    // Refresh staff JWT so Storage rules see `role` before the user picks a photo.
     StaffStorageAuth.prepareForUpload().catchError((Object e) {
-      debugPrint('Hero manage sheet: staff token refresh failed: $e');
+      debugPrint('Hero manage sheet: staff check failed: $e');
     });
   }
 

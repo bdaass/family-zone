@@ -31,6 +31,24 @@ exports.syncUserRoleToClaims = onDocumentWritten(
   },
 );
 
+// Callable backfill when JWT custom claims are missing (e.g. user doc predates the trigger).
+exports.syncMyRoleClaims = onCall({ region: 'europe-west1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const uid = request.auth.uid;
+  const userSnap = await db.collection('users').doc(uid).get();
+
+  if (!userSnap.exists) {
+    throw new HttpsError('not-found', 'User profile not found.');
+  }
+
+  const role = userSnap.data().role || 'client';
+  await getAuth().setCustomUserClaims(uid, { role });
+  return { role };
+});
+
 exports.submitContactMessage = onCall(async (request) => {
   const data = request.data ?? {};
   const message = typeof data.message === 'string' ? data.message.trim() : '';
