@@ -584,6 +584,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
+  Future<void> _signOut() async {
+    try {
+      if (!kIsWeb) {
+        await GoogleSignIn().signOut();
+      }
+    } catch (e) {
+      debugPrint('Google sign out: $e');
+    }
+    await FirebaseAuth.instance.signOut();
+  }
+
   void _showAuthModal() {
     showModalBottomSheet(
       context: context,
@@ -610,13 +621,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         return Scaffold(
       backgroundColor: AppColors.cream,
       appBar: _buildAppBar(context, user, showDrawer),
-      drawer: showDrawer ? _buildDrawer() : null,
+      drawer: showDrawer ? _buildDrawer(user) : null,
       body: Stack(
         children: [
           const AmbientBackground(),
           Row(
             children: [
-              if (useInlineSidebar) _buildSidebar(),
+              if (useInlineSidebar) _buildSidebar(user),
               Expanded(
                 child: FadeTransition(
                   opacity: _fadeAnimation,
@@ -665,30 +676,34 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  Widget _buildDrawer() {
+  Widget _buildDrawer(User? user) {
     return Drawer(
       backgroundColor: AppColors.cream,
       child: SafeArea(
-        child: _sidebarContent(showBrand: true, onStaffTap: () {
-          Navigator.pop(context);
-          _scrollToStaffPanel();
-        }),
+        child: _sidebarContent(
+          user: user,
+          showBrand: true,
+          onStaffTap: () {
+            Navigator.pop(context);
+            _scrollToStaffPanel();
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildSidebar() {
+  Widget _buildSidebar(User? user) {
     return Container(
       width: 268,
       decoration: BoxDecoration(
         color: AppColors.white.withValues(alpha: 0.92),
         border: Border(right: BorderSide(color: AppColors.creamDark.withValues(alpha: 0.8))),
       ),
-      child: _sidebarContent(showBrand: false, onStaffTap: _scrollToStaffPanel),
+      child: _sidebarContent(user: user, showBrand: false, onStaffTap: _scrollToStaffPanel),
     );
   }
 
-  Widget _sidebarContent({required bool showBrand, VoidCallback? onStaffTap}) {
+  Widget _sidebarContent({required User? user, required bool showBrand, VoidCallback? onStaffTap}) {
     return FilterSidebarContent(
       userRole: userRole,
       showBrand: showBrand,
@@ -728,12 +743,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       onPriceRangeCommit: (_) => _reloadCatalog(),
       onClearFilters: _resetFilters,
       onStaffPanelTap: onStaffTap,
-      isLoggedIn: userRole != 'guest',
+      isLoggedIn: user != null,
       onSignIn: _showAuthModal,
-      onSignOut: () async {
-        await GoogleSignIn().signOut();
-        await FirebaseAuth.instance.signOut();
-      },
+      onSignOut: _signOut,
     );
   }
 
@@ -868,18 +880,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                               IconButton(
                                 constraints: iconConstraints,
                                 padding: EdgeInsets.zero,
-                                tooltip: user == null ? S.of('auth_sign_in_title') : S.of('auth_login_button'),
+                                tooltip: user == null ? S.of('auth_sign_in_title') : S.of('auth_sign_out'),
                                 icon: Icon(
                                   user == null ? Icons.person_outline_rounded : Icons.logout_rounded,
                                   color: AppColors.ink,
                                   size: iconSize,
                                 ),
-                                onPressed: () async {
+                                onPressed: () {
                                   if (user == null) {
                                     _showAuthModal();
                                   } else {
-                                    await GoogleSignIn().signOut();
-                                    await FirebaseAuth.instance.signOut();
+                                    _signOut();
                                   }
                                 },
                               ),

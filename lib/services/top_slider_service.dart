@@ -107,6 +107,15 @@ class TopSliderService {
     final sized = await _resolveSlidesAt('$folderPath/${size.folderName}', idSuffix: '_${size.name}');
     if (sized.isNotEmpty) return sized;
 
+    // Wide layout can reuse mobile crops when nothing was uploaded under /web/.
+    if (size == HeroSliderSize.web) {
+      final mobile = await _resolveSlidesAt(
+        '$folderPath/${HeroSliderSize.mobile.folderName}',
+        idSuffix: '_mobile',
+      );
+      if (mobile.isNotEmpty) return mobile;
+    }
+
     return _resolveSlidesAt(folderPath);
   }
 
@@ -114,10 +123,11 @@ class TopSliderService {
     final results = await Future.wait(
       _slideNames.map((name) async {
         final objectPath = '$folderPath/$name.jpg';
-        if (!await _objectExists(objectPath)) return null;
+        final imageUrl = await _resolveImageUrl(objectPath);
+        if (imageUrl == null) return null;
         return TopSliderSlide(
           id: '${name.toLowerCase()}$idSuffix',
-          imageUrl: publicMediaUrl(objectPath),
+          imageUrl: imageUrl,
           category: TopSliderCategory.fromFileStem(name),
         );
       }),
@@ -135,16 +145,18 @@ class TopSliderService {
     return 'https://firebasestorage.googleapis.com/v0/b/$bucket/o/$encoded?alt=media';
   }
 
-  static Future<bool> _objectExists(String objectPath) async {
+  /// Resolves a display URL for a Storage object, or null if missing.
+  static Future<String?> _resolveImageUrl(String objectPath) async {
     if (kIsWeb) {
       try {
-        await FirebaseStorage.instance.ref(objectPath).getDownloadURL();
-        return true;
+        return await FirebaseStorage.instance.ref(objectPath).getDownloadURL();
       } catch (_) {
-        return false;
+        return null;
       }
     }
-    return storageObjectExistsAtUrl(publicMediaUrl(objectPath));
+    final url = publicMediaUrl(objectPath);
+    if (!await storageObjectExistsAtUrl(url)) return null;
+    return url;
   }
 
   /// Local web build fallback for `flutter run -d chrome` before Storage upload.

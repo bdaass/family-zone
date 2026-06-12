@@ -179,6 +179,13 @@ class _HeroSliderManageSheetState extends State<HeroSliderManageSheet> {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
+          const SizedBox(height: 8),
+          Text(
+            S.fmt('hero_storage_path', {
+              'path': 'topSlider/${TopSliderService.localeFolder(LocaleService.instance.isArabic)}/${_size.folderName}/',
+            }),
+            style: TextStyle(fontSize: 11, color: AppColors.ink.withValues(alpha: 0.55), height: 1.35),
+          ),
           const SizedBox(height: 16),
           ..._categories.map((category) {
             final busy = _uploadingCategory == category;

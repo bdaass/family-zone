@@ -454,11 +454,24 @@ class _SlidePageState extends State<_SlidePage> with SingleTickerProviderStateMi
         gaplessPlayback: true,
         filterQuality: FilterQuality.medium,
         cacheWidth: cacheWidth,
-        webHtmlElementStrategy: WebHtmlElementStrategy.never,
+        // Web: native <img> avoids CORS fetch failures from Firebase Storage URLs.
+        webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
         errorBuilder: (_, __, err) {
           debugPrint('Hero slide failed (${widget.slide.imageUrl}): $err');
           return error;
         },
+        loadingBuilder: kIsWeb
+            ? null
+            : (context, child, progress) {
+                if (progress == null) return child;
+                return const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white),
+                  ),
+                );
+              },
       ),
     );
   }
