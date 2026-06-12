@@ -11,6 +11,7 @@ import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/catalog_sort.dart';
 import '../models/product_catalog.dart';
+import '../models/top_slider_slide.dart';
 import '../services/favorite_service.dart';
 import '../services/product_catalog_service.dart';
 import '../theme/app_theme.dart';
@@ -431,6 +432,31 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
+  void _scrollToCollection() {
+    final context = _collectionKey.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _applyHeroFilter(TopSliderFilterAction action) {
+    setState(() {
+      if (action.ageGroup != null) selectedAgeGroup = action.ageGroup!;
+      if (action.sex != null) selectedSex = action.sex!;
+      if (action.saleOnly == true) {
+        saleOnly = true;
+      } else if (action.ageGroup != null) {
+        saleOnly = false;
+      }
+    });
+    _reloadCatalog();
+    _scrollToCollection();
+  }
+
   void _showFavoritesSheet() {
     FavoritesSheet.show(context);
   }
@@ -605,7 +631,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           child: DashboardHero(
                             key: ValueKey(LocaleService.instance.languageCode),
                             isWide: isWide,
+                            canManageSlides: _isStaff,
                             onContactTap: _contactViaWhatsApp,
+                            onCategoryTap: _applyHeroFilter,
                           ),
                         ),
                         SliverToBoxAdapter(

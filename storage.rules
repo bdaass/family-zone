@@ -25,6 +25,11 @@ service firebase.storage {
         && request.resource.contentType == 'image/jpeg';
     }
 
+    function isValidSliderImage() {
+      return request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+    }
+
     match /product_images/{fileName} {
       allow read: if true;
 
@@ -35,6 +40,17 @@ service firebase.storage {
       allow update: if isStaff() && isValidProductImage();
 
       allow delete: if isAdmin();
+    }
+
+    // Wildcard so getDownloadURL and listAll both work on folder prefixes.
+    match /topSlider/{allPaths=**} {
+      allow read: if true;
+      allow write: if isStaff() && isValidSliderImage();
+    }
+
+    match /web/topSlider/{allPaths=**} {
+      allow read: if true;
+      allow write: if isStaff() && isValidSliderImage();
     }
 
   }
