@@ -28,6 +28,7 @@ import '../widgets/favorites_sheet.dart';
 import '../widgets/filter_bottom_sheet.dart';
 import '../services/cart_service.dart';
 import '../services/locale_service.dart';
+import '../services/top_slider_service.dart';
 import '../services/order_service.dart';
 import '../services/product_write_service.dart';
 import '../widgets/sidebar_content.dart';
@@ -61,6 +62,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSubscription;
   Timer? _searchDebounce;
   bool _authResolved = false;
+  int _heroRefreshToken = 0;
 
   final GlobalKey _staffPanelKey = GlobalKey();
   final GlobalKey _collectionKey = GlobalKey();
@@ -149,6 +151,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       }
     });
     await _catalog.fetchFirst(_catalogQuery);
+  }
+
+  Future<void> _refreshDashboard() async {
+    TopSliderService.invalidateCache();
+    if (mounted) setState(() => _heroRefreshToken++);
+    await _reloadCatalog();
   }
 
   Future<void> _loadMoreProducts() async {
@@ -618,7 +626,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     position: _slideAnimation,
                     child: RefreshIndicator(
                       color: AppColors.coral,
-                      onRefresh: _reloadCatalog,
+                      onRefresh: _refreshDashboard,
                       child: CustomScrollView(
                       controller: _scrollController,
                       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
@@ -632,6 +640,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           child: DashboardHero(
                             key: ValueKey(LocaleService.instance.languageCode),
                             isWide: isWide,
+                            refreshToken: _heroRefreshToken,
                             canManageSlides: _isStaff,
                             onContactTap: _contactViaWhatsApp,
                             onCategoryTap: _applyHeroFilter,

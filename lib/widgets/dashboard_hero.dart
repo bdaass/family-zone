@@ -9,7 +9,6 @@ import '../services/locale_service.dart';
 import '../services/top_slider_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/hero_slider_settings.dart';
-import '../utils/product_image_settings.dart';
 import 'family_zone_brand.dart';
 import 'hero_slider_manage_sheet.dart';
 
@@ -20,6 +19,7 @@ class DashboardHero extends StatefulWidget {
   final TopSliderFilterCallback? onCategoryTap;
   final bool isWide;
   final bool canManageSlides;
+  final int refreshToken;
 
   const DashboardHero({
     super.key,
@@ -27,6 +27,7 @@ class DashboardHero extends StatefulWidget {
     this.onCategoryTap,
     this.isWide = false,
     this.canManageSlides = false,
+    this.refreshToken = 0,
   });
 
   @override
@@ -55,7 +56,7 @@ class _DashboardHeroState extends State<DashboardHero> {
   @override
   void didUpdateWidget(covariant DashboardHero oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isWide != widget.isWide) {
+    if (oldWidget.isWide != widget.isWide || oldWidget.refreshToken != widget.refreshToken) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _loadSlides(clearCache: true);
       });
@@ -113,6 +114,7 @@ class _DashboardHeroState extends State<DashboardHero> {
 
   void _onPageChanged(int index) {
     setState(() => _page = index);
+    _restartAutoPlay();
   }
 
   void _onSlideTap(TopSliderSlide slide) {
@@ -209,10 +211,12 @@ class _DashboardHeroState extends State<DashboardHero> {
       children: [
         PageView.builder(
           controller: _pageController,
+          clipBehavior: Clip.hardEdge,
           onPageChanged: _onPageChanged,
           itemCount: _slides.length,
           itemBuilder: (context, index) => _SlidePage(
             slide: _slides[index],
+            sliderSize: _sliderSize,
             isActive: index == _page,
             onTap: () => _onSlideTap(_slides[index]),
           ),
@@ -228,18 +232,21 @@ class _DashboardHeroState extends State<DashboardHero> {
           bottom: 12,
           child: _whatsappButton(compact: !widget.isWide),
         ),
+        if (_slides.isNotEmpty)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: widget.isWide ? 52 : 46,
+            child: Center(
+              child: _categoryChip(_slides[_page.clamp(0, _slides.length - 1)]),
+            ),
+          ),
         if (_slides.length > 1)
           Positioned(
             left: 0,
             right: 0,
             bottom: 10,
             child: _dotIndicator(),
-          ),
-        if (_slides.isNotEmpty)
-          PositionedDirectional(
-            start: 14,
-            bottom: 14,
-            child: _categoryChip(_slides[_page.clamp(0, _slides.length - 1)]),
           ),
       ],
     );
@@ -381,10 +388,16 @@ class _DashboardHeroState extends State<DashboardHero> {
 
 class _SlidePage extends StatefulWidget {
   final TopSliderSlide slide;
+  final HeroSliderSize sliderSize;
   final bool isActive;
   final VoidCallback onTap;
 
-  const _SlidePage({required this.slide, required this.isActive, required this.onTap});
+  const _SlidePage({
+    required this.slide,
+    required this.sliderSize,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   State<_SlidePage> createState() => _SlidePageState();
@@ -422,14 +435,17 @@ class _SlidePageState extends State<_SlidePage> with SingleTickerProviderStateMi
   }
 
   Widget _slideImage() {
+    final cacheWidth = kIsWeb ? null : HeroSliderSettings.uploadMaxWidth(widget.sliderSize);
+
     return SizedBox.expand(
       child: Image.network(
         widget.slide.imageUrl,
         fit: BoxFit.cover,
         alignment: Alignment.center,
         gaplessPlayback: true,
-        cacheWidth: kIsWeb ? null : ProductImageSettings.detailCacheSize,
-        webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
+        filterQuality: FilterQuality.medium,
+        cacheWidth: cacheWidth,
+        webHtmlElementStrategy: WebHtmlElementStrategy.never,
         errorBuilder: (_, __, ___) => DecoratedBox(
           decoration: BoxDecoration(gradient: AppColors.heroGradient),
           child: Center(child: Icon(Icons.image_outlined, color: AppColors.white.withValues(alpha: 0.6), size: 40)),
