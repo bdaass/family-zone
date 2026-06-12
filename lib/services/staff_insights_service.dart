@@ -60,7 +60,7 @@ class StaffInsightsService {
       products.orderBy('viewCount', descending: true).limit(10).get(),
       products.orderBy('favoriteCount', descending: true).limit(10).get(),
       products.where('approved', isEqualTo: false).count().get(),
-      products.where('stockQty', isLessThanOrEqualTo: ProductCatalog.lowStockThreshold).orderBy('stockQty').limit(15).get(),
+      products.where('stockQty', isLessThanOrEqualTo: ProductCatalog.lowStockThreshold).limit(50).get(),
       products.where('sold', isEqualTo: true).limit(15).get(),
     ]);
 
@@ -91,10 +91,23 @@ class StaffInsightsService {
   }
 
   static Stream<QuerySnapshot<Map<String, dynamic>>> pendingApprovalStream() {
-    return FirebaseFirestore.instance
-        .collection('products')
-        .where('approved', isEqualTo: false)
-        .orderBy('created_at', descending: true)
-        .snapshots();
+    // Single-field filter only — sort client-side to avoid a composite index.
+    return FirebaseFirestore.instance.collection('products').where('approved', isEqualTo: false).snapshots();
+  }
+
+  /// Newest pending items first (used after fetching without orderBy).
+  static List<QueryDocumentSnapshot<Map<String, dynamic>>> sortByCreatedDesc(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final sorted = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
+    sorted.sort((a, b) {
+      final aTs = a.data()['created_at'];
+      final bTs = b.data()['created_at'];
+      if (aTs is Timestamp && bTs is Timestamp) {
+        return bTs.compareTo(aTs);
+      }
+      return b.id.compareTo(a.id);
+    });
+    return sorted;
   }
 }

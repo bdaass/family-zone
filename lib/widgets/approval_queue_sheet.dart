@@ -99,10 +99,10 @@ class ApprovalQueueSheet extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator(color: AppColors.coral));
                 }
                 if (snap.hasError) {
-                  return Center(child: Text(S.fmt('update_failed', {'error': '${snap.error}'})));
+                  return Center(child: Text(S.fmt('products_load_error_detail', {'error': '${snap.error}'})));
                 }
 
-                final docs = snap.data?.docs ?? [];
+                final docs = StaffInsightsService.sortByCreatedDesc(snap.data?.docs ?? []);
                 if (docs.isEmpty) {
                   return Padding(
                     padding: const EdgeInsets.all(32),

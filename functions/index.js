@@ -11,18 +11,25 @@ const db = getFirestore();
 const CONTACT_WINDOW_MS = 60 * 60 * 1000;
 const CONTACT_MAX_PER_WINDOW = 5;
 
-exports.syncUserRoleToClaims = onDocumentWritten('users/{userId}', async (event) => {
-  const userId = event.params.userId;
-  const after = event.data?.after;
+// Firestore (default) is eur3 — deploy this trigger in europe-west1, not us-central1.
+exports.syncUserRoleToClaims = onDocumentWritten(
+  {
+    document: 'users/{userId}',
+    region: 'europe-west1',
+  },
+  async (event) => {
+    const userId = event.params.userId;
+    const after = event.data?.after;
 
-  if (!after?.exists) {
+    if (!after?.exists) {
+      return null;
+    }
+
+    const role = after.data().role || 'client';
+    await getAuth().setCustomUserClaims(userId, { role });
     return null;
-  }
-
-  const role = after.data().role || 'client';
-  await getAuth().setCustomUserClaims(userId, { role });
-  return null;
-});
+  },
+);
 
 exports.submitContactMessage = onCall(async (request) => {
   const data = request.data ?? {};

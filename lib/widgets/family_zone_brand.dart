@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 
-/// Store logo + "FAMILY ZONE" title.
+/// Store logo + "Family Zone" title.
 class FamilyZoneBrand extends StatelessWidget {
-  static const logoAssetPath = 'assets/images/logo.png';
-  static const logoFullAssetPath = 'assets/images/logo_full.png';
+  static const logoAssetPath = 'assets/images/logo.jpeg';
 
   final double logoSize;
   final double fontSize;
@@ -19,7 +18,7 @@ class FamilyZoneBrand extends StatelessWidget {
     this.logoSize = 44,
     this.fontSize = 18,
     this.spacing = 10,
-    this.letterSpacing = 2,
+    this.letterSpacing = 0.2,
     this.showTitle = true,
   });
 
@@ -27,14 +26,14 @@ class FamilyZoneBrand extends StatelessWidget {
       : logoSize = 38,
         fontSize = 17,
         spacing = 10,
-        letterSpacing = -0.3,
+        letterSpacing = 0.1,
         showTitle = true;
 
   const FamilyZoneBrand.logoOnly({super.key, double size = 44})
       : logoSize = size,
         fontSize = 18,
         spacing = 10,
-        letterSpacing = 2,
+        letterSpacing = 0.2,
         showTitle = false;
 
   @override
