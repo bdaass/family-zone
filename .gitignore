@@ -79,6 +79,12 @@ firebase-debug.*.log
 
 # Cloud Functions dependencies
 functions/node_modules/
+scripts/node_modules/
+
+# Firebase / GCP service account keys (never commit)
+*firebase-adminsdk*.json
+*service-account*.json
+**/serviceAccount*.json
 
 # Android release signing (never commit secrets)
 android/key.properties

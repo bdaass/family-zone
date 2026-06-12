@@ -11,10 +11,19 @@
  *   web/topSlider/{locale}/mobile/{Name}.jpg
  *   web/topSlider/{locale}/web/{Name}.jpg
  *
- * Upload to Storage:
+ * Generate local variants only:
+ *   node scripts/generate_top_slider_variants.mjs
+ *
+ * Generate + upload to Firebase Storage:
  *   node scripts/generate_top_slider_variants.mjs --upload
  *
- * Requires ADC for --upload: gcloud auth application-default login
+ * Upload existing local variants (skip regeneration):
+ *   node scripts/generate_top_slider_variants.mjs --upload-only
+ *
+ * Auth for --upload / --upload-only (pick one):
+ *   gcloud auth application-default login
+ *   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+ *   node scripts/generate_top_slider_variants.mjs --upload --service-account /path/to/key.json
  */
 import fs from 'fs';
 import path from 'path';
@@ -26,6 +35,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const webRoot = path.join(root, 'web', 'topSlider');
 const bucketName = 'family-zone-2026.firebasestorage.app';
+const projectId = 'family-zone-2026';
 const names = ['Male', 'Female', 'Boy', 'Girl', 'Solde'];
 const locales = ['English', 'arabic'];
 
@@ -34,7 +44,59 @@ const SLOTS = {
   web: { width: 2400, height: 440 },
 };
 
-const upload = process.argv.includes('--upload');
+const argv = process.argv.slice(2);
+const upload = argv.includes('--upload') || argv.includes('--upload-only');
+const uploadOnly = argv.includes('--upload-only');
+
+function readArg(flag) {
+  const index = argv.indexOf(flag);
+  if (index === -1 || index + 1 >= argv.length) return null;
+  return argv[index + 1];
+}
+
+function printAuthHelp() {
+  console.error(`
+Upload requires Google Cloud credentials. Use one of:
+
+  1) Application Default Credentials (opens browser once):
+     gcloud auth application-default login
+     node scripts/generate_top_slider_variants.mjs --upload-only
+
+  2) Firebase service account JSON
+     Firebase Console → Project settings → Service accounts → Generate new private key
+     export GOOGLE_APPLICATION_CREDENTIALS="$HOME/Downloads/family-zone-2026-firebase-adminsdk.json"
+     node scripts/generate_top_slider_variants.mjs --upload-only
+
+  3) Pass the key file on the command line:
+     node scripts/generate_top_slider_variants.mjs --upload-only \\
+       --service-account "$HOME/Downloads/family-zone-2026-firebase-adminsdk.json"
+
+Local files are already under web/topSlider/ — --upload-only skips regeneration.
+`);
+}
+
+function initFirebaseAdmin() {
+  const serviceAccountPath = readArg('--service-account') ?? process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+  if (serviceAccountPath) {
+    const resolved = path.resolve(serviceAccountPath);
+    if (!fs.existsSync(resolved)) {
+      console.error(`Service account file not found: ${resolved}`);
+      process.exit(1);
+    }
+    const serviceAccount = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId,
+      storageBucket: bucketName,
+    });
+    console.log('Using service account:', path.basename(resolved));
+    return;
+  }
+
+  admin.initializeApp({ projectId, storageBucket: bucketName });
+  console.log('Using Application Default Credentials (gcloud auth application-default login)');
+}
 
 async function cropToSlot(buffer, slot) {
   const { width: tw, height: th } = slot;
@@ -111,11 +173,46 @@ async function uploadOutputs(bucket, locale, name, mobileBuf, webBuf) {
   }
 }
 
+async function readLocalVariant(locale, slot, name) {
+  const local = path.join(webRoot, locale, slot, `${name}.jpg`);
+  if (!fs.existsSync(local)) return null;
+  return fs.readFileSync(local);
+}
+
+async function uploadExistingVariants(bucket) {
+  let uploaded = 0;
+
+  for (const locale of locales) {
+    for (const name of names) {
+      const mobileBuf = await readLocalVariant(locale, 'mobile', name);
+      const webBuf = await readLocalVariant(locale, 'web', name);
+      if (!mobileBuf || !webBuf) {
+        console.warn('Skip upload (missing local variant):', locale, name);
+        continue;
+      }
+      await uploadOutputs(bucket, locale, name, mobileBuf, webBuf);
+      uploaded += 2;
+    }
+  }
+
+  if (uploaded === 0) {
+    console.error('No local variants found under web/topSlider/. Run without --upload-only first.');
+    process.exit(1);
+  }
+
+  console.log(`Done — uploaded ${uploaded} files to gs://${bucketName}/topSlider/`);
+}
+
 async function main() {
   let bucket;
   if (upload) {
-    admin.initializeApp({ projectId: 'family-zone-2026', storageBucket: bucketName });
+    initFirebaseAdmin();
     bucket = admin.storage().bucket();
+  }
+
+  if (uploadOnly) {
+    await uploadExistingVariants(bucket);
+    return;
   }
 
   for (const locale of locales) {
@@ -135,9 +232,18 @@ async function main() {
       if (bucket) await uploadOutputs(bucket, locale, name, mobileBuf, webBuf);
     }
   }
+
+  if (upload) {
+    console.log(`Done — uploaded hero banners to gs://${bucketName}/topSlider/`);
+  }
 }
 
 main().catch((err) => {
+  const message = err?.message ?? String(err);
+  if (message.includes('default credentials') || message.includes('Could not load the default credentials')) {
+    printAuthHelp();
+    process.exit(1);
+  }
   console.error(err);
   process.exit(1);
 });

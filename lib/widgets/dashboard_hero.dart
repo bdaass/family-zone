@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/top_slider_slide.dart';
 import '../services/locale_service.dart';
-import '../services/top_slider_service.dart';
+import '../services/top_slider_service.dart' show TopSliderService;
 import '../theme/app_theme.dart';
 import '../utils/hero_slider_settings.dart';
 import 'family_zone_brand.dart';
@@ -56,7 +56,11 @@ class _DashboardHeroState extends State<DashboardHero> {
   @override
   void didUpdateWidget(covariant DashboardHero oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isWide != widget.isWide || oldWidget.refreshToken != widget.refreshToken) {
+    if (oldWidget.isWide != widget.isWide) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadSlides(clearCache: true);
+      });
+    } else if (oldWidget.refreshToken != widget.refreshToken) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _loadSlides(clearCache: true);
       });
@@ -435,6 +439,11 @@ class _SlidePageState extends State<_SlidePage> with SingleTickerProviderStateMi
   }
 
   Widget _slideImage() {
+    final error = DecoratedBox(
+      decoration: BoxDecoration(gradient: AppColors.heroGradient),
+      child: Center(child: Icon(Icons.image_outlined, color: AppColors.white.withValues(alpha: 0.6), size: 40)),
+    );
+
     final cacheWidth = kIsWeb ? null : HeroSliderSettings.uploadMaxWidth(widget.sliderSize);
 
     return SizedBox.expand(
@@ -446,10 +455,10 @@ class _SlidePageState extends State<_SlidePage> with SingleTickerProviderStateMi
         filterQuality: FilterQuality.medium,
         cacheWidth: cacheWidth,
         webHtmlElementStrategy: WebHtmlElementStrategy.never,
-        errorBuilder: (_, __, ___) => DecoratedBox(
-          decoration: BoxDecoration(gradient: AppColors.heroGradient),
-          child: Center(child: Icon(Icons.image_outlined, color: AppColors.white.withValues(alpha: 0.6), size: 40)),
-        ),
+        errorBuilder: (_, __, err) {
+          debugPrint('Hero slide failed (${widget.slide.imageUrl}): $err');
+          return error;
+        },
       ),
     );
   }

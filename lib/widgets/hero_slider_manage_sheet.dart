@@ -1,9 +1,12 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/top_slider_slide.dart';
 import '../services/locale_service.dart';
+import '../services/staff_storage_auth.dart';
 import '../services/top_slider_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/hero_slider_settings.dart';
@@ -55,6 +58,10 @@ class _HeroSliderManageSheetState extends State<HeroSliderManageSheet> {
   void initState() {
     super.initState();
     _size = widget.initialSize;
+    // Refresh staff JWT so Storage rules see `role` before the user picks a photo.
+    StaffStorageAuth.prepareForUpload().catchError((Object e) {
+      debugPrint('Hero manage sheet: staff token refresh failed: $e');
+    });
   }
 
   String _label(TopSliderCategory category) {
@@ -84,7 +91,12 @@ class _HeroSliderManageSheetState extends State<HeroSliderManageSheet> {
       setState(() => _uploadingCategory = category);
 
       final rawBytes = await picked.readAsBytes();
-      final bytes = await ImageCompressor.compressForHeroUpload(rawBytes, size: _size) ?? rawBytes;
+      final bytes = await ImageCompressor.compressForHeroUpload(rawBytes, size: _size);
+      if (bytes == null || bytes.isEmpty) {
+        throw StateError('Could not process this image. Try a JPG or PNG from your gallery.');
+      }
+      ImageCompressor.ensureHeroUploadSize(bytes);
+
       final isArabic = LocaleService.instance.isArabic;
 
       await TopSliderService.uploadSlide(
@@ -101,7 +113,15 @@ class _HeroSliderManageSheetState extends State<HeroSliderManageSheet> {
     } catch (e) {
       debugPrint('Hero slide upload failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('hero_upload_failed'))));
+        final detail = switch (e) {
+          FirebaseException(:final message) => message,
+          FirebaseAuthException(:final message) => message,
+          StateError(:final message) => message,
+          _ => '$e',
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${S.of('hero_upload_failed')} $detail')),
+        );
       }
     } finally {
       if (mounted) setState(() => _uploadingCategory = null);

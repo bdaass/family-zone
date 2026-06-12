@@ -39,6 +39,25 @@ dart pub global activate flutterfire_cli
 flutterfire configure
 ```
 
+### Hero banner upload (optional)
+
+Regenerate mobile/web slider crops and upload to Firebase Storage:
+
+```bash
+cd scripts && npm install && cd ..
+
+# 1) Local crops only (no credentials needed)
+node scripts/generate_top_slider_variants.mjs
+
+# 2) Upload — requires Google credentials (pick one):
+gcloud auth application-default login
+node scripts/generate_top_slider_variants.mjs --upload-only
+
+# Or use a Firebase service account JSON from Console → Project settings → Service accounts
+export GOOGLE_APPLICATION_CREDENTIALS="$HOME/Downloads/your-firebase-adminsdk.json"
+node scripts/generate_top_slider_variants.mjs --upload-only
+```
+
 ## Deploy backend
 
 Deploy rules, indexes, functions, and web hosting:

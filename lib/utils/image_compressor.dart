@@ -30,6 +30,27 @@ class ImageCompressor {
 
   /// Center-crops to the hero slot aspect ratio, then encodes JPEG.
   static Future<Uint8List?> compressForHeroUpload(Uint8List input, {required HeroSliderSize size}) async {
-    return HeroImageProcessor.encodeForSlot(input, size: size);
+    if (input.isEmpty) return null;
+
+    final encoded = HeroImageProcessor.encodeForSlot(input, size: size);
+    if (encoded != null && encoded.isNotEmpty) return encoded;
+
+    // Gallery HEIC/WebP etc. — decode via flutter_image_compress, then crop to slot.
+    final compressed = await compressForUpload(input);
+    if (compressed == null || compressed.isEmpty) return null;
+
+    return HeroImageProcessor.encodeForSlot(compressed, size: size);
+  }
+
+  /// Hero banners must stay under Firebase Storage rule limit (3 MB).
+  static const int heroUploadMaxBytes = 3 * 1024 * 1024;
+
+  static void ensureHeroUploadSize(Uint8List bytes) {
+    if (bytes.length > heroUploadMaxBytes) {
+      throw StateError(
+        'Image is too large after compression (${(bytes.length / (1024 * 1024)).toStringAsFixed(1)} MB, max 3 MB). '
+        'Try a smaller photo.',
+      );
+    }
   }
 }
