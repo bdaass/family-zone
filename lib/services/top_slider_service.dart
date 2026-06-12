@@ -1,18 +1,16 @@
-import 'dart:typed_data';
-
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/top_slider_slide.dart';
 import '../utils/hero_slider_settings.dart';
 
-/// Loads locale- and size-specific hero banners from Firebase Storage.
+/// Loads locale- and viewport-specific hero banners from Firebase Storage.
 ///
-/// Storage layout:
+/// Storage layout (required for display):
 /// - `topSlider/{English|arabic}/{mobile|web}/Male.jpg`
-/// Legacy fallbacks (no size folder):
+///
+/// Legacy source masters (used by generate script, not shown directly):
 /// - `topSlider/{English|arabic}/Male.jpg`
-/// - `web/topSlider/{English|arabic}/Male.jpg`
 class TopSliderService {
   TopSliderService._();
 
@@ -34,13 +32,23 @@ class TopSliderService {
     for (final prefix in _storagePrefixes) {
       for (final folder in localeFolders) {
         try {
-          final slides = await _loadKnownFiles('$prefix/$folder', size: size);
+          final slides = await _loadSizedFiles('$prefix/$folder', size: size);
           if (slides.isNotEmpty) {
             _cache[cacheKey] = slides;
             return slides;
           }
         } catch (e, st) {
           debugPrint('TopSliderService: $prefix/$folder — $e\n$st');
+        }
+      }
+    }
+
+    if (kIsWeb) {
+      for (final folder in localeFolders) {
+        final slides = _loadHostingFiles(folder, size: size);
+        if (slides.isNotEmpty) {
+          _cache[cacheKey] = slides;
+          return slides;
         }
       }
     }
@@ -80,11 +88,11 @@ class TopSliderService {
     invalidateCache();
   }
 
-  static Future<List<TopSliderSlide>> _loadKnownFiles(String folderPath, {required HeroSliderSize size}) async {
+  static Future<List<TopSliderSlide>> _loadSizedFiles(String folderPath, {required HeroSliderSize size}) async {
     final slides = <TopSliderSlide>[];
 
     for (final name in _slideNames) {
-      final slide = await _resolveSlide(folderPath, name, size);
+      final slide = await _resolveSizedSlide(folderPath, name, size);
       if (slide != null) slides.add(slide);
     }
 
@@ -92,28 +100,15 @@ class TopSliderService {
     return slides;
   }
 
-  static Future<TopSliderSlide?> _resolveSlide(String folderPath, String name, HeroSliderSize size) async {
-    final sizedPath = '$folderPath/${size.folderName}/$name';
-    final sized = await _tryLoadFile(sizedPath);
-    if (sized != null) {
-      return TopSliderSlide(
-        id: '${name.toLowerCase()}_${size.name}',
-        imageUrl: sized,
-        category: TopSliderCategory.fromFileStem(name),
-      );
-    }
+  static Future<TopSliderSlide?> _resolveSizedSlide(String folderPath, String name, HeroSliderSize size) async {
+    final url = await _tryLoadFile('$folderPath/${size.folderName}/$name');
+    if (url == null) return null;
 
-    // Legacy: shared image without mobile/web subfolder.
-    final legacy = await _tryLoadFile('$folderPath/$name');
-    if (legacy != null) {
-      return TopSliderSlide(
-        id: name.toLowerCase(),
-        imageUrl: legacy,
-        category: TopSliderCategory.fromFileStem(name),
-      );
-    }
-
-    return null;
+    return TopSliderSlide(
+      id: '${name.toLowerCase()}_${size.name}',
+      imageUrl: url,
+      category: TopSliderCategory.fromFileStem(name),
+    );
   }
 
   static Future<String?> _tryLoadFile(String pathWithoutExtension) async {
@@ -126,5 +121,29 @@ class TopSliderService {
       }
     }
     return null;
+  }
+
+  /// Bundled sized assets in `web/topSlider/{locale}/{mobile|web}/`.
+  static List<TopSliderSlide> _loadHostingFiles(String localeFolder, {required HeroSliderSize size}) {
+    final slides = <TopSliderSlide>[];
+
+    for (final name in _slideNames) {
+      final url = _hostingSlideUrl(localeFolder, name, size);
+      if (url == null) continue;
+      slides.add(
+        TopSliderSlide(
+          id: '${name.toLowerCase()}_${size.name}_host',
+          imageUrl: url,
+          category: TopSliderCategory.fromFileStem(name),
+        ),
+      );
+    }
+
+    slides.sort((a, b) => a.category.sortIndex.compareTo(b.category.sortIndex));
+    return slides;
+  }
+
+  static String? _hostingSlideUrl(String localeFolder, String name, HeroSliderSize size) {
+    return Uri.base.resolve('/topSlider/$localeFolder/${size.folderName}/$name.jpg').toString();
   }
 }

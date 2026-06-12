@@ -42,9 +42,7 @@ class _DashboardHeroState extends State<DashboardHero> {
 
   static const _autoInterval = Duration(seconds: 5);
 
-  bool get _isWebWide => kIsWeb && widget.isWide;
-
-  HeroSliderSize get _sliderSize => HeroSliderSettings.sizeForLayout(isWebWide: _isWebWide);
+  HeroSliderSize get _sliderSize => HeroSliderSettings.sizeForLayout(isWideLayout: widget.isWide);
 
   @override
   void initState() {
@@ -155,7 +153,7 @@ class _DashboardHeroState extends State<DashboardHero> {
   @override
   Widget build(BuildContext context) {
     final horizontal = widget.isWide ? 20.0 : 16.0;
-    final height = HeroSliderSettings.displayHeight(isWebWide: _isWebWide);
+    final height = HeroSliderSettings.displayHeight(isWideLayout: widget.isWide);
 
     return ListenableBuilder(
       listenable: LocaleService.instance,
@@ -424,15 +422,18 @@ class _SlidePageState extends State<_SlidePage> with SingleTickerProviderStateMi
   }
 
   Widget _slideImage() {
-    return Image.network(
-      widget.slide.imageUrl,
-      fit: BoxFit.cover,
-      alignment: Alignment.center,
-      cacheWidth: ProductImageSettings.detailCacheSize,
-      webHtmlElementStrategy: WebHtmlElementStrategy.never,
-      errorBuilder: (_, __, ___) => DecoratedBox(
-        decoration: BoxDecoration(gradient: AppColors.heroGradient),
-        child: Center(child: Icon(Icons.image_outlined, color: AppColors.white.withValues(alpha: 0.6), size: 40)),
+    return SizedBox.expand(
+      child: Image.network(
+        widget.slide.imageUrl,
+        fit: BoxFit.cover,
+        alignment: Alignment.center,
+        gaplessPlayback: true,
+        cacheWidth: kIsWeb ? null : ProductImageSettings.detailCacheSize,
+        webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
+        errorBuilder: (_, __, ___) => DecoratedBox(
+          decoration: BoxDecoration(gradient: AppColors.heroGradient),
+          child: Center(child: Icon(Icons.image_outlined, color: AppColors.white.withValues(alpha: 0.6), size: 40)),
+        ),
       ),
     );
   }

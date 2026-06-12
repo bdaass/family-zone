@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
-import 'hero_slider_settings.dart';
+import 'hero_image_processor.dart';
+import 'hero_slider_settings.dart' show HeroSliderSize;
 import 'product_image_settings.dart';
 
 class ImageCompressor {
@@ -27,24 +28,8 @@ class ImageCompressor {
     }
   }
 
-  /// Banner compression sized for phone or web hero slots.
+  /// Center-crops to the hero slot aspect ratio, then encodes JPEG.
   static Future<Uint8List?> compressForHeroUpload(Uint8List input, {required HeroSliderSize size}) async {
-    if (input.isEmpty) return null;
-
-    try {
-      final compressed = await FlutterImageCompress.compressWithList(
-        input,
-        minWidth: HeroSliderSettings.uploadMaxWidth(size),
-        minHeight: HeroSliderSettings.uploadMaxHeight(size),
-        quality: HeroSliderSettings.uploadQuality,
-        format: CompressFormat.jpeg,
-      );
-
-      if (compressed.isEmpty) return null;
-      return compressed;
-    } catch (e) {
-      debugPrint('Hero image compression failed: $e');
-      return null;
-    }
+    return HeroImageProcessor.encodeForSlot(input, size: size);
   }
 }

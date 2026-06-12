@@ -15,6 +15,7 @@ import '../models/top_slider_slide.dart';
 import '../services/favorite_service.dart';
 import '../services/product_catalog_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/hero_slider_settings.dart';
 import '../utils/product_permissions.dart';
 import '../widgets/ambient_background.dart';
 import '../widgets/dashboard_hero.dart';
@@ -598,7 +599,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         final useInlineSidebar = kIsWeb && screenWidth > 900;
         final showDrawer = !useInlineSidebar;
         final user = FirebaseAuth.instance.currentUser;
-        final isWide = screenWidth > 600;
+        final isWide = screenWidth >= HeroSliderSettings.wideLayoutBreakpoint;
 
         return Scaffold(
       backgroundColor: AppColors.cream,
