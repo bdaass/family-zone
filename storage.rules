@@ -38,6 +38,20 @@ service firebase.storage {
         && request.resource.contentType == 'image/jpeg';
     }
 
+    match /product_images/{productId}/{fileName} {
+      allow read: if fileName != 'barcode.jpg' || isAdmin();
+
+      allow create: if isStaff()
+        && isValidProductImage()
+        && (fileName.matches('^[0-9]+\\.jpg$') || fileName == 'barcode.jpg');
+
+      allow update: if isStaff()
+        && isValidProductImage()
+        && (fileName.matches('^[0-9]+\\.jpg$') || fileName == 'barcode.jpg');
+
+      allow delete: if isAdmin();
+    }
+
     match /product_images/{fileName} {
       allow read: if true;
 

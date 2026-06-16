@@ -2,17 +2,17 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
 import '../services/product_catalog_service.dart';
+import '../services/product_image_service.dart';
 import '../services/product_write_service.dart';
-import '../utils/image_compressor.dart';
 import '../widgets/audience_fields.dart';
 import '../widgets/color_input_field.dart';
+import '../widgets/branch_stock_field.dart';
+import '../widgets/product_images_field.dart';
 import '../widgets/sale_pricing_fields.dart';
 import '../widgets/size_input_field.dart';
 import '../widgets/staff_choice_dropdown.dart';
@@ -36,12 +36,16 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   String _colorsEncoded = '';
   int _sizeInputKey = 0;
   int _colorInputKey = 0;
+  int _productImagesKey = 0;
+  int _branchStockKey = 0;
   final _discountPercentController = TextEditingController();
   final _salePriceController = TextEditingController();
-  final _stockQtyController = TextEditingController();
 
-  Uint8List? _imageBytes;
-  bool _isCompressing = false;
+  List<String> _keptImageUrls = [];
+  List<Uint8List> _newProductImages = [];
+  Uint8List? _barcodeImage;
+  Map<String, int?> _branchStock = {};
+  Set<String> _branchStockAcknowledged = {};
   bool _isUploading = false;
 
   String? _formSeason;
@@ -49,7 +53,6 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   String? _formSex;
   String? _formType;
   _FieldChoice _colorChoice = _FieldChoice.unset;
-  _FieldChoice _stockChoice = _FieldChoice.unset;
 
   bool get _strictForm => widget.userRole == 'employee';
 
@@ -72,22 +75,29 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     final priceParsed = double.tryParse(_priceController.text.trim());
 
     if (!ProductCatalog.isValidProductId(productId)) return 'product_id_invalid';
-    if (title.isEmpty || description.isEmpty || sizes.isEmpty || priceParsed == null || _imageBytes == null) {
+    if (title.isEmpty || description.isEmpty || sizes.isEmpty || priceParsed == null) {
       return sizes.isEmpty ? 'sizes_required' : 'staff_validation_required';
     }
+
+    final imageError = ProductImagesFieldValidation.validate(
+      keptUrls: _keptImageUrls,
+      newImages: _newProductImages,
+      barcodeImage: _barcodeImage,
+      hadBarcode: false,
+    );
+    if (imageError != null) return imageError;
 
     if (_strictForm) {
       if (_formSeason == null || _formAgeGroup == null || _formSex == null || _formType == null) {
         return 'staff_validation_select_all';
       }
       if (_colorChoice == _FieldChoice.unset) return 'staff_validation_colors';
-      if (_stockChoice == _FieldChoice.unset) return 'staff_validation_stock';
-      if (_stockChoice == _FieldChoice.specified) {
-        final stockQtyText = _stockQtyController.text.trim();
-        if (stockQtyText.isEmpty) return 'staff_validation_stock';
-        final stockQtyParsed = int.tryParse(stockQtyText);
-        if (stockQtyParsed == null || stockQtyParsed < 0) return 'stock_qty_invalid';
-      }
+      final branchStockError = BranchStockFieldValidation.validate(
+        values: _branchStock,
+        requireExplicitChoice: true,
+        acknowledgedBranches: _branchStockAcknowledged,
+      );
+      if (branchStockError != null) return branchStockError;
     }
 
     final salePricing = ProductCatalog.resolveSalePricing(
@@ -98,11 +108,12 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     if (salePricing.errorKey != null) return salePricing.errorKey;
 
     if (!_strictForm) {
-      final stockQtyText = _stockQtyController.text.trim();
-      if (stockQtyText.isNotEmpty) {
-        final stockQtyParsed = int.tryParse(stockQtyText);
-        if (stockQtyParsed == null || stockQtyParsed < 0) return 'stock_qty_invalid';
-      }
+      final branchStockError = BranchStockFieldValidation.validate(
+        values: _branchStock,
+        requireExplicitChoice: false,
+        acknowledgedBranches: _branchStockAcknowledged,
+      );
+      if (branchStockError != null) return branchStockError;
     }
 
     return null;
@@ -120,33 +131,6 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         _colorChoice = _FieldChoice.unset;
       }
     });
-  }
-
-  Future<void> _pickImage() async {
-    try {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(source: ImageSource.gallery);
-      if (picked == null) return;
-
-      setState(() => _isCompressing = true);
-
-      final rawBytes = await picked.readAsBytes();
-      final compressed = await ImageCompressor.compressForUpload(rawBytes);
-
-      if (!mounted) return;
-
-      setState(() {
-        _imageBytes = compressed ?? rawBytes;
-        _isCompressing = false;
-      });
-    } catch (e) {
-      debugPrint('Image picking failed: $e');
-      if (mounted) setState(() => _isCompressing = false);
-    }
-  }
-
-  void _clearImage() {
-    setState(() => _imageBytes = null);
   }
 
   Future<void> _submitProduct() async {
@@ -171,7 +155,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     );
     final soldPriceParsed = salePricing.soldPrice;
     final discountPercent = salePricing.discountPercent;
-    final stockQtyParsed = _resolveStockQtyForSave();
+    final branchStockSave = ProductCatalog.resolveBranchStockForSave(_branchStock);
 
     setState(() => _isUploading = true);
 
@@ -183,13 +167,11 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         return;
       }
 
-      final storageRef = FirebaseStorage.instance.ref().child('product_images/$productId.jpg');
-      final uploadTask = storageRef.putData(
-        _imageBytes!,
-        SettableMetadata(contentType: 'image/jpeg'),
+      final uploaded = await ProductImageService.uploadNewProductImages(
+        productId: productId,
+        productImages: _newProductImages,
+        barcodeImage: _barcodeImage!,
       );
-      final snapshot = await uploadTask;
-      final imageUrl = await snapshot.ref.getDownloadURL();
 
       final isAdmin = widget.userRole == 'admin';
       final season = _formSeason ?? 'summer';
@@ -208,14 +190,20 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
           'discountPercent': discountPercent,
           'soldPrice': soldPriceParsed,
         },
-        'imageUrl': imageUrl,
+        ...ProductCatalog.imageFieldsForWrite(
+          imageUrls: uploaded.imageUrls,
+          barcodeImageUrl: uploaded.barcodeUrl,
+        ),
         'season': season,
         'ageGroup': ageGroup,
         'sex': sex,
         'type': type,
         'favoriteCount': 0,
         'viewCount': 0,
-        if (stockQtyParsed != null) 'stockQty': stockQtyParsed,
+        if (branchStockSave.branchStock != null) ...{
+          'branchStock': branchStockSave.branchStock,
+          'stockQty': branchStockSave.stockQty,
+        },
         'visibility': isAdmin,
         'approved': isAdmin,
         'sold': false,
@@ -245,20 +233,24 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         _colorsEncoded = '';
         _sizeInputKey++;
         _colorInputKey++;
-        _imageBytes = null;
+        _productImagesKey++;
+        _branchStockKey++;
+        _keptImageUrls = [];
+        _newProductImages = [];
+        _barcodeImage = null;
+        _branchStock = {};
+        _branchStockAcknowledged = {};
         if (_strictForm) {
           _formSeason = null;
           _formAgeGroup = null;
           _formSex = null;
           _formType = null;
           _colorChoice = _FieldChoice.unset;
-          _stockChoice = _FieldChoice.unset;
         }
       });
       _priceController.clear();
       _discountPercentController.clear();
       _salePriceController.clear();
-      _stockQtyController.clear();
 
       if (mounted) {
         final message = isAdmin
@@ -282,72 +274,6 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     return ProductCatalog.encodeColors(ProductCatalog.colorsFromField(_colorsEncoded));
   }
 
-  int? _resolveStockQtyForSave() {
-    if (_strictForm) {
-      if (_stockChoice == _FieldChoice.notDetermined) return null;
-      return int.tryParse(_stockQtyController.text.trim());
-    }
-    final stockQtyText = _stockQtyController.text.trim();
-    if (stockQtyText.isEmpty) return null;
-    return int.tryParse(stockQtyText);
-  }
-
-  Widget _stockChoiceSection() {
-    if (!_strictForm) {
-      return TextField(
-        controller: _stockQtyController,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(
-          labelText: S.of('field_stock_qty'),
-          hintText: S.of('field_stock_qty_hint'),
-          isDense: true,
-        ),
-      );
-    }
-
-    final chipStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w700);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          S.of('field_stock_qty'),
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              label: Text(ProductCatalog.notDeterminedLabel(), style: chipStyle),
-              selected: _stockChoice == _FieldChoice.notDetermined,
-              onSelected: (_) => setState(() {
-                _stockChoice = _FieldChoice.notDetermined;
-                _stockQtyController.clear();
-              }),
-            ),
-            ChoiceChip(
-              label: Text(S.of('field_stock_set_qty'), style: chipStyle),
-              selected: _stockChoice == _FieldChoice.specified,
-              onSelected: (_) => setState(() => _stockChoice = _FieldChoice.specified),
-            ),
-          ],
-        ),
-        if (_stockChoice == _FieldChoice.specified) ...[
-          const SizedBox(height: 8),
-          TextField(
-            controller: _stockQtyController,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              hintText: S.of('field_stock_qty_hint'),
-              isDense: true,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   @override
   void dispose() {
     _productIdController.dispose();
@@ -356,14 +282,11 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     _priceController.dispose();
     _discountPercentController.dispose();
     _salePriceController.dispose();
-    _stockQtyController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool hasImage = _imageBytes != null;
-
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
@@ -414,89 +337,47 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
             textCapitalization: TextCapitalization.characters,
           ),
           const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              InkWell(
-                onTap: (_isUploading || _isCompressing) ? null : _pickImage,
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  width: 120,
-                  height: 120,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.creamDark,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.creamDark),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: _isCompressing
-                        ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral))
-                        : hasImage
-                            ? Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  Image.memory(_imageBytes!, fit: BoxFit.cover),
-                                  Positioned(
-                                    top: 6,
-                                    right: 6,
-                                    child: GestureDetector(
-                                      onTap: _clearImage,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
-                                        child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.add_a_photo_outlined, color: AppColors.inkMuted),
-                                  const SizedBox(height: 4),
-                                  Text(S.of('staff_image_label'), style: const TextStyle(fontSize: 11, color: AppColors.inkMuted)),
-                                ],
-                              ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _titleController,
-                      decoration: InputDecoration(labelText: S.of('field_title'), isDense: true),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _descController,
-                      decoration: InputDecoration(labelText: S.of('field_description'), isDense: true),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _priceController,
-                      decoration: InputDecoration(labelText: S.of('field_price'), isDense: true),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 8),
-                    SalePricingFields(
-                      dense: true,
-                      regularPriceController: _priceController,
-                      salePriceController: _salePriceController,
-                      discountPercentController: _discountPercentController,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          TextField(
+            controller: _titleController,
+            decoration: InputDecoration(labelText: S.of('field_title'), isDense: true),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _descController,
+            decoration: InputDecoration(labelText: S.of('field_description'), isDense: true),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _priceController,
+            decoration: InputDecoration(labelText: S.of('field_price'), isDense: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 8),
+          SalePricingFields(
+            dense: true,
+            regularPriceController: _priceController,
+            salePriceController: _salePriceController,
+            discountPercentController: _discountPercentController,
+          ),
+          const SizedBox(height: 16),
+          ProductImagesField(
+            key: ValueKey('photos_$_productImagesKey'),
+            dense: true,
+            onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
+            onNewImagesChanged: (images) => _newProductImages = images,
+            onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
+            onRemovedUrlsChanged: (_) {},
           ),
           const SizedBox(height: 12),
-          _stockChoiceSection(),
+          BranchStockField(
+            key: ValueKey('branch_stock_$_branchStockKey'),
+            dense: true,
+            requireExplicitChoice: _strictForm,
+            onChanged: (values) => _branchStock = values,
+            onAcknowledgedBranchesChanged: (ack) => setState(() => _branchStockAcknowledged = ack),
+          ),
           const SizedBox(height: 16),
           SizeInputField(
             key: ValueKey('size_$_sizeInputKey'),

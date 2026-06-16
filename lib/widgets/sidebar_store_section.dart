@@ -93,7 +93,7 @@ class SidebarStoreSection extends StatelessWidget {
                       _InfoLine(
                         icon: Icons.location_on_outlined,
                         text: isAr ? location.labelAr : location.labelEn,
-                        onTap: () => _openUrl(StoreConfig.mapsUrl),
+                        onTap: () => _openUrl(location.mapsUrl),
                       ),
                     _InfoLine(
                       icon: Icons.schedule_rounded,

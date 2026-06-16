@@ -1,13 +1,13 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
-import '../utils/product_image_settings.dart';
+import 'product_image_carousel.dart';
 
 class ProductCardItem extends StatefulWidget {
   final String imageUrl;
+  final List<String> imageUrls;
   final String title;
   final String description;
   final String size;
@@ -38,6 +38,7 @@ class ProductCardItem extends StatefulWidget {
   const ProductCardItem({
     super.key,
     required this.imageUrl,
+    this.imageUrls = const [],
     required this.title,
     required this.description,
     required this.size,
@@ -111,7 +112,10 @@ class _ProductCardItemState extends State<ProductCardItem> {
                       children: [
                         ColoredBox(
                           color: AppColors.creamDark,
-                          child: _ProductImage(imageUrl: widget.imageUrl),
+                          child: ProductImageCarousel(
+                            imageUrls: widget.imageUrls.isNotEmpty ? widget.imageUrls : [widget.imageUrl],
+                            autoPlay: true,
+                          ),
                         ),
                         if (widget.isHidden)
                           Positioned.fill(
@@ -398,44 +402,6 @@ class _PriceLabel extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppColors.coral),
         ),
       ],
-    );
-  }
-}
-
-class _ProductImage extends StatelessWidget {
-  final String imageUrl;
-
-  const _ProductImage({required this.imageUrl});
-
-  @override
-  Widget build(BuildContext context) {
-    final url = imageUrl.trim();
-    if (url.isEmpty) {
-      return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 32));
-    }
-
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      alignment: Alignment.topCenter,
-      width: double.infinity,
-      height: double.infinity,
-      cacheWidth: ProductImageSettings.displayCacheSize,
-      cacheHeight: ProductImageSettings.displayCacheSize,
-      webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
-      errorBuilder: (context, error, stackTrace) {
-        debugPrint('Product image load failed: $error');
-        return const Center(child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 32));
-      },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        if (kIsWeb) {
-          return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 28));
-        }
-        return const Center(
-          child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral)),
-        );
-      },
     );
   }
 }

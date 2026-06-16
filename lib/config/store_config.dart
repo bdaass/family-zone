@@ -12,22 +12,54 @@ class StoreConfig {
 
   static const facebookUrl = 'https://www.facebook.com/familyzonelb/';
   static const instagramUrl = 'https://www.instagram.com/familyzone.lb/';
-  static const mapsUrl = 'https://maps.app.goo.gl/VZG34D717FK9KT4d6';
 
   static const workingHoursEn = '8 AM – 9 PM, every day';
   static const workingHoursAr = '٨ صباحاً – ٩ مساءً، كل الأيام';
 
   static const locations = [
     StoreLocation(
+      id: 'tripoli',
       labelAr: 'طرابلس بجانب مسجد السلام',
-      labelEn: 'Tripoli, next to Al-Salam Mosque',
+      labelEn: 'Tripoli',
+      mapsUrl: 'https://maps.app.goo.gl/VZG34D717FK9KT4d6',
+    ),
+    StoreLocation(
+      id: 'elminieh',
+      labelAr: 'المنية فوق نفق بحنين',
+      labelEn: 'El Minieh',
+      mapsUrl: 'https://maps.app.goo.gl/Ga59KbHmS6Ruruik7',
+    ),
+    StoreLocation(
+      id: 'halba',
+      labelAr: 'حلبا',
+      labelEn: 'Halba',
+      mapsUrl: 'https://maps.app.goo.gl/nTVQXUtZehcL6RfD8',
     ),
   ];
+
+  static StoreLocation branchById(String id) {
+    return locations.firstWhere(
+      (b) => b.id == id,
+      orElse: () => locations.first,
+    );
+  }
+
+  static String branchLabel(String id, {required bool isArabic}) {
+    final branch = branchById(id);
+    return isArabic ? branch.labelAr : branch.labelEn;
+  }
 }
 
 class StoreLocation {
+  final String id;
   final String labelAr;
   final String labelEn;
+  final String mapsUrl;
 
-  const StoreLocation({required this.labelAr, required this.labelEn});
+  const StoreLocation({
+    required this.id,
+    required this.labelAr,
+    required this.labelEn,
+    required this.mapsUrl,
+  });
 }

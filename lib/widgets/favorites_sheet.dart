@@ -119,10 +119,7 @@ class FavoritesSheet extends StatelessWidget {
     );
   }
 
-  static String _imageUrl(Map<String, dynamic> data) {
-    final raw = data['imageUrl'] ?? data['image_url'] ?? data['image'] ?? '';
-    return raw is String ? raw.trim() : raw.toString().trim();
-  }
+  static String _imageUrl(Map<String, dynamic> data) => ProductCatalog.primaryImageUrl(data);
 }
 
 class _EmptyFavorites extends StatelessWidget {

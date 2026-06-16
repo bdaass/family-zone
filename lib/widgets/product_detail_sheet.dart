@@ -6,7 +6,7 @@ import '../models/product_catalog.dart';
 import '../services/product_share_service.dart';
 import '../services/product_view_service.dart';
 import '../theme/app_theme.dart';
-import '../utils/product_image_settings.dart';
+import 'product_image_carousel.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final String productDocId;
@@ -14,6 +14,9 @@ class ProductDetailSheet extends StatefulWidget {
   final String title;
   final String description;
   final String imageUrl;
+  final List<String> imageUrls;
+  final String? barcodeImageUrl;
+  final bool showBarcodeImage;
   final String sizeField;
   final String colorField;
   final double price;
@@ -28,6 +31,8 @@ class ProductDetailSheet extends StatefulWidget {
   final bool isNew;
   final bool isOld;
   final bool showOldBadge;
+  final bool showBranchStock;
+  final Map<String, int?> branchStock;
   final VoidCallback? onFavoriteToggle;
   final VoidCallback? onAddToCart;
 
@@ -38,6 +43,9 @@ class ProductDetailSheet extends StatefulWidget {
     required this.title,
     required this.description,
     required this.imageUrl,
+    this.imageUrls = const [],
+    this.barcodeImageUrl,
+    this.showBarcodeImage = false,
     required this.sizeField,
     this.colorField = '',
     required this.price,
@@ -52,6 +60,8 @@ class ProductDetailSheet extends StatefulWidget {
     this.isNew = false,
     this.isOld = false,
     this.showOldBadge = false,
+    this.showBranchStock = false,
+    this.branchStock = const {},
     this.onFavoriteToggle,
     this.onAddToCart,
   });
@@ -63,6 +73,9 @@ class ProductDetailSheet extends StatefulWidget {
     required String title,
     required String description,
     required String imageUrl,
+    List<String> imageUrls = const [],
+    String? barcodeImageUrl,
+    bool showBarcodeImage = false,
     required String sizeField,
     String colorField = '',
     required double price,
@@ -77,6 +90,8 @@ class ProductDetailSheet extends StatefulWidget {
     bool isNew = false,
     bool isOld = false,
     bool showOldBadge = false,
+    bool showBranchStock = false,
+    Map<String, int?> branchStock = const {},
     VoidCallback? onFavoriteToggle,
     VoidCallback? onAddToCart,
   }) {
@@ -86,6 +101,9 @@ class ProductDetailSheet extends StatefulWidget {
       title: title,
       description: description,
       imageUrl: imageUrl,
+      imageUrls: imageUrls,
+      barcodeImageUrl: barcodeImageUrl,
+      showBarcodeImage: showBarcodeImage,
       sizeField: sizeField,
       colorField: colorField,
       price: price,
@@ -100,6 +118,8 @@ class ProductDetailSheet extends StatefulWidget {
       isNew: isNew,
       isOld: isOld,
       showOldBadge: showOldBadge,
+      showBranchStock: showBranchStock,
+      branchStock: branchStock,
       onFavoriteToggle: onFavoriteToggle,
       onAddToCart: onAddToCart,
     );
@@ -257,10 +277,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           children: [
             ColoredBox(
               color: AppColors.creamDark,
-              child: InteractiveViewer(
-                minScale: 1,
-                maxScale: 3,
-                child: _DetailImage(imageUrl: widget.imageUrl),
+              child: ProductImageCarousel(
+                imageUrls: widget.imageUrls.isNotEmpty ? widget.imageUrls : [widget.imageUrl],
+                interactive: true,
+                showIndicators: true,
+                autoPlay: true,
               ),
             ),
             ..._buildLeftBadges(),
@@ -329,6 +350,44 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         _detailRow(S.of('field_audience'), widget.genderLabel),
         const SizedBox(height: 10),
         _detailRow(S.of('field_type'), widget.typeLabel),
+        if (widget.showBranchStock) ...[
+          const SizedBox(height: 20),
+          Text(
+            S.of('field_branch_stock'),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: 10),
+          for (final id in ProductCatalog.branchIds) ...[
+            _detailRow(
+              ProductCatalog.branchLabel(id),
+              ProductCatalog.branchStockDisplayLabel(widget.branchStock[id]),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+        if (widget.showBarcodeImage && widget.barcodeImageUrl?.isNotEmpty == true) ...[
+          const SizedBox(height: 20),
+          Text(
+            S.of('field_barcode_admin_only'),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.creamDark,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Image.network(
+                widget.barcodeImageUrl!,
+                height: 120,
+                width: double.infinity,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         Text(
           S.of('available_sizes'),
@@ -489,44 +548,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         label,
         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.8),
       ),
-    );
-  }
-}
-
-class _DetailImage extends StatelessWidget {
-  final String imageUrl;
-
-  const _DetailImage({required this.imageUrl});
-
-  @override
-  Widget build(BuildContext context) {
-    final url = imageUrl.trim();
-    if (url.isEmpty) {
-      return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 48));
-    }
-
-    return Image.network(
-      url,
-      fit: BoxFit.contain,
-      alignment: Alignment.center,
-      width: double.infinity,
-      height: double.infinity,
-      cacheWidth: ProductImageSettings.detailCacheSize,
-      cacheHeight: ProductImageSettings.detailCacheSize,
-      webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
-      errorBuilder: (context, error, stackTrace) {
-        return const Center(child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 48));
-      },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return const Center(
-          child: SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral),
-          ),
-        );
-      },
     );
   }
 }

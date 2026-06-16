@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
@@ -14,6 +13,7 @@ import '../models/product_catalog.dart';
 import '../models/top_slider_slide.dart';
 import '../services/favorite_service.dart';
 import '../services/product_catalog_service.dart';
+import '../services/product_image_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/hero_slider_settings.dart';
 import '../utils/product_permissions.dart';
@@ -329,7 +329,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  Future<void> _deleteProduct(String docId, String imageUrl) async {
+  Future<void> _deleteProduct(String docId, Map<String, dynamic> data) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -348,11 +348,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (confirmed != true || !mounted) return;
 
     try {
-      if (imageUrl.isNotEmpty) {
-        try {
-          await FirebaseStorage.instance.refFromURL(imageUrl).delete();
-        } catch (_) {}
-      }
+      await ProductImageService.deleteAllForProduct(
+        docId,
+        imageUrls: ProductCatalog.productImageUrlsFrom(data),
+        barcodeImageUrl: ProductCatalog.barcodeImageUrlFrom(data),
+      );
       await FirebaseFirestore.instance.collection('products').doc(docId).delete();
       _invalidateCatalog();
       if (mounted) {
@@ -381,7 +381,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           description: ProductCatalog.descriptionFrom(data),
           size: ProductCatalog.sizeFrom(data),
           colors: ProductCatalog.colorsFrom(data),
-          stockQty: ProductCatalog.stockQtyFrom(data),
+          branchStock: ProductCatalog.branchStockFrom(data),
           price: ProductCatalog.priceFrom(data),
           discountPercent: ProductCatalog.discountPercentFrom(data),
           soldPrice: ProductCatalog.soldPriceFrom(data),
@@ -389,6 +389,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ageGroup: audience.ageGroup,
           sex: audience.sex,
           type: (data['type'] ?? 'clothes').toString(),
+          imageUrls: ProductCatalog.productImageUrlsFrom(data),
+          hasBarcode: ProductCatalog.hasBarcodeImage(data),
+          barcodeImageUrl: userRole == 'admin' ? ProductCatalog.barcodeImageUrlFrom(data) : null,
+          showBarcodePreview: userRole == 'admin',
         );
       },
     );
@@ -396,6 +400,20 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     try {
       final newProductId = result.remove('productId') as String?;
+      final imageUpdate = result.remove('_imageUpdate') as ProductImageUpdate?;
+
+      if (imageUpdate != null) {
+        final applied = await ProductImageService.applyImageUpdate(
+          productId: docId,
+          update: imageUpdate,
+        );
+        final existingBarcode = ProductCatalog.barcodeImageUrlFrom(data);
+        result.addAll(ProductCatalog.imageFieldsForWrite(
+          imageUrls: applied.imageUrls,
+          barcodeImageUrl: applied.barcodeUrl ?? existingBarcode,
+        ));
+      }
+
       await ProductWriteService.updateProduct(
         docId: docId,
         updates: result,
@@ -555,7 +573,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       productDocId: docId,
       productId: ProductCatalog.productIdFrom(data, docId),
       title: ProductCatalog.titleFrom(data),
-      imageUrl: _productImageUrl(data),
+      imageUrl: ProductCatalog.primaryImageUrl(data),
       sizeField: ProductCatalog.sizeFrom(data),
       colorField: ProductCatalog.colorsFrom(data),
       price: ProductCatalog.priceFrom(data),
@@ -564,13 +582,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   void _openProductDetail(String docId, Map<String, dynamic> data) {
+    final imageUrls = ProductCatalog.productImageUrlsFrom(data);
     ProductDetailSheet.show(
       context,
       productDocId: docId,
       productId: ProductCatalog.productIdFrom(data, docId),
       title: ProductCatalog.titleFrom(data),
       description: ProductCatalog.descriptionFrom(data),
-      imageUrl: _productImageUrl(data),
+      imageUrl: ProductCatalog.primaryImageUrl(data),
+      imageUrls: imageUrls,
+      barcodeImageUrl: userRole == 'admin' ? ProductCatalog.barcodeImageUrlFrom(data) : null,
+      showBarcodeImage: userRole == 'admin',
       sizeField: ProductCatalog.sizeFrom(data),
       colorField: ProductCatalog.colorsFrom(data),
       price: ProductCatalog.priceFrom(data),
@@ -585,6 +607,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       isNew: ProductCatalog.isNewlyAdded(data),
       isOld: ProductCatalog.isOlderThanSixMonths(data),
       showOldBadge: userRole == 'admin',
+      showBranchStock: _isStaff,
+      branchStock: ProductCatalog.branchStockFrom(data),
       onFavoriteToggle: _isClient ? () => _toggleFavorite(docId) : null,
       onAddToCart: _isStaff || (data['sold'] ?? false) ? null : () => _openAddToCart(docId, data),
     );
@@ -1113,7 +1137,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   (context, index) {
                     final doc = filteredDocs[index];
                     final data = doc.data();
-                    final imageUrl = _productImageUrl(data);
+                    final imageUrls = ProductCatalog.productImageUrlsFrom(data);
+                    final imageUrl = ProductCatalog.primaryImageUrl(data);
                     return TweenAnimationBuilder<double>(
                       key: ValueKey('${doc.id}-$catalogSort-$selectedSeason-$selectedAgeGroup-$selectedSex-$selectedCategory-$saleOnly-$priceMin-$priceMax-${_searchController.text}'),
                       duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
@@ -1133,6 +1158,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       },
                       child: ProductCardItem(
                         imageUrl: imageUrl,
+                        imageUrls: imageUrls,
                         title: ProductCatalog.titleFrom(data),
                         description: ProductCatalog.descriptionFrom(data),
                         size: ProductCatalog.sizeFrom(data),
@@ -1155,7 +1181,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         canDelete: ProductPermissions.canDelete(userRole),
                         canEdit: ProductPermissions.canEdit(userRole),
                         canToggleVisibility: ProductPermissions.canToggleVisibility(userRole),
-                        onDelete: () => _deleteProduct(doc.id, imageUrl),
+                        onDelete: () => _deleteProduct(doc.id, data),
                         onEdit: () => _editProduct(doc.id, data),
                         onToggleVisibility: () => _toggleVisibility(doc.id, data),
                         onAddToCart: _isStaff ? null : () => _openAddToCart(doc.id, data),
@@ -1181,11 +1207,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
           ],
         );
-  }
-
-  String _productImageUrl(Map<String, dynamic> data) {
-    final raw = data['imageUrl'] ?? data['image_url'] ?? data['image'] ?? '';
-    return raw is String ? raw.trim() : raw.toString().trim();
   }
 
 }

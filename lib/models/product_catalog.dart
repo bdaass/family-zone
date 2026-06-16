@@ -1,3 +1,4 @@
+import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 
 /// Shared product categories, filters, and field helpers.
@@ -405,6 +406,47 @@ class ProductCatalog {
     return (data['colors'] ?? '').toString();
   }
 
+  /// Public product photos (never includes barcode).
+  static List<String> productImageUrlsFrom(Map<String, dynamic> data) {
+    final urls = data['imageUrls'];
+    if (urls is List) {
+      final list = urls
+          .map((e) => e.toString().trim())
+          .where((u) => u.isNotEmpty)
+          .toList();
+      if (list.isNotEmpty) return list;
+    }
+    final legacy = data['imageUrl'] ?? data['image_url'] ?? data['image'] ?? '';
+    final single = legacy.toString().trim();
+    return single.isEmpty ? const [] : [single];
+  }
+
+  static String primaryImageUrl(Map<String, dynamic> data) {
+    final urls = productImageUrlsFrom(data);
+    return urls.isEmpty ? '' : urls.first;
+  }
+
+  static String? barcodeImageUrlFrom(Map<String, dynamic> data) {
+    final raw = data['barcodeImageUrl']?.toString().trim();
+    if (raw == null || raw.isEmpty) return null;
+    return raw;
+  }
+
+  static bool hasBarcodeImage(Map<String, dynamic> data) => barcodeImageUrlFrom(data) != null;
+
+  static Map<String, dynamic> imageFieldsForWrite({
+    required List<String> imageUrls,
+    String? barcodeImageUrl,
+  }) {
+    final urls = imageUrls.where((u) => u.trim().isNotEmpty).toList();
+    return {
+      'imageUrls': urls,
+      if (urls.isNotEmpty) 'imageUrl': urls.first,
+      if (barcodeImageUrl != null && barcodeImageUrl.trim().isNotEmpty)
+        'barcodeImageUrl': barcodeImageUrl.trim(),
+    };
+  }
+
   /// Delimiter for size/color lists — keeps labels like `1-5 years` intact.
   static const listFieldDelimiter = ' | ';
 
@@ -502,12 +544,73 @@ class ProductCatalog {
 
   static const lowStockThreshold = 5;
 
+  static List<String> get branchIds =>
+      StoreConfig.locations.map((location) => location.id).toList();
+
+  static String branchLabel(String branchId) =>
+      StoreConfig.branchLabel(branchId, isArabic: S.isAr);
+
+  /// Per-branch quantity. Missing key = not set. Legacy `stockQty` maps to Tripoli only.
+  static Map<String, int?> branchStockFrom(Map<String, dynamic> data) {
+    final result = <String, int?>{for (final id in branchIds) id: null};
+    final raw = data['branchStock'];
+    if (raw is Map) {
+      for (final id in branchIds) {
+        final value = raw[id];
+        if (value == null) continue;
+        if (value is int) {
+          result[id] = value;
+        } else if (value is double) {
+          result[id] = value.toInt();
+        } else {
+          result[id] = int.tryParse(value.toString());
+        }
+      }
+      return result;
+    }
+
+    final legacy = stockQtyFrom(data);
+    if (legacy != null) result['tripoli'] = legacy;
+    return result;
+  }
+
+  static int? totalStockFrom(Map<String, dynamic> data) {
+    final stored = stockQtyFrom(data);
+    final branches = branchStockFrom(data);
+    final values = branches.values.whereType<int>();
+    if (values.isEmpty) return stored;
+    return values.fold<int>(0, (sum, qty) => sum + qty);
+  }
+
+  static ({Map<String, int>? branchStock, int? stockQty}) resolveBranchStockForSave(
+    Map<String, int?> stock,
+  ) {
+    final branchStock = <String, int>{};
+    for (final id in branchIds) {
+      final qty = stock[id];
+      if (qty != null) branchStock[id] = qty;
+    }
+    if (branchStock.isEmpty) return (branchStock: null, stockQty: null);
+    final total = branchStock.values.fold<int>(0, (sum, qty) => sum + qty);
+    return (branchStock: branchStock, stockQty: total);
+  }
+
+  static String branchStockDisplayLabel(int? qty) {
+    if (qty == null) return S.of('branch_stock_not_set');
+    return S.fmt('branch_stock_available', {'count': '$qty'});
+  }
+
   static int? stockQtyFrom(Map<String, dynamic> data) {
-    final raw = data['stockQty'];
-    if (raw == null) return null;
-    if (raw is int) return raw;
-    if (raw is double) return raw.toInt();
-    return int.tryParse(raw.toString());
+    final total = data['stockQty'];
+    if (total != null) {
+      if (total is int) return total;
+      if (total is double) return total.toInt();
+      return int.tryParse(total.toString());
+    }
+    final branches = branchStockFrom(data);
+    final values = branches.values.whereType<int>();
+    if (values.isEmpty) return null;
+    return values.fold<int>(0, (sum, qty) => sum + qty);
   }
 
   static bool isLowStockAlert(int? stockQty, {bool sold = false}) {

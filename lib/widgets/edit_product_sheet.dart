@@ -1,11 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
+import '../services/product_image_service.dart';
 import '../theme/app_theme.dart';
 import 'audience_fields.dart';
+import 'branch_stock_field.dart';
 import 'color_input_field.dart';
+import 'product_images_field.dart';
 import 'size_input_field.dart';
 import 'sale_pricing_fields.dart';
 
@@ -15,7 +19,6 @@ class EditProductSheet extends StatefulWidget {
   final String description;
   final String size;
   final String colors;
-  final int? stockQty;
   final double price;
   final int? discountPercent;
   final double? soldPrice;
@@ -23,6 +26,11 @@ class EditProductSheet extends StatefulWidget {
   final String ageGroup;
   final String sex;
   final String type;
+  final Map<String, int?> branchStock;
+  final List<String> imageUrls;
+  final bool hasBarcode;
+  final String? barcodeImageUrl;
+  final bool showBarcodePreview;
 
   const EditProductSheet({
     super.key,
@@ -31,7 +39,6 @@ class EditProductSheet extends StatefulWidget {
     required this.description,
     required this.size,
     this.colors = '',
-    this.stockQty,
     required this.price,
     this.discountPercent,
     this.soldPrice,
@@ -39,6 +46,11 @@ class EditProductSheet extends StatefulWidget {
     required this.ageGroup,
     required this.sex,
     required this.type,
+    this.branchStock = const {},
+    this.imageUrls = const [],
+    this.hasBarcode = false,
+    this.barcodeImageUrl,
+    this.showBarcodePreview = false,
   });
 
   @override
@@ -54,15 +66,21 @@ class _EditProductSheetState extends State<EditProductSheet> {
   late String _colorsEncoded;
   late final TextEditingController _discountPercentController;
   late final TextEditingController _salePriceController;
-  late final TextEditingController _stockQtyController;
   late String _season;
   late String _ageGroup;
   late String _sex;
   late String _type;
+  Map<String, int?> _branchStock = {};
+  List<String> _keptImageUrls = [];
+  List<Uint8List> _newProductImages = [];
+  List<String> _removedImageUrls = [];
+  Uint8List? _barcodeImage;
 
   @override
   void initState() {
     super.initState();
+    _keptImageUrls = List<String>.from(widget.imageUrls);
+    _branchStock = Map<String, int?>.from(widget.branchStock);
     _productIdController = TextEditingController(text: widget.productId);
     _titleController = TextEditingController(text: widget.title);
     _descController = TextEditingController(text: widget.description);
@@ -74,9 +92,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
     );
     _salePriceController = TextEditingController(
       text: widget.soldPrice != null ? widget.soldPrice!.toStringAsFixed(2) : '',
-    );
-    _stockQtyController = TextEditingController(
-      text: widget.stockQty != null ? '${widget.stockQty}' : '',
     );
     final normalizedSeason = ProductCatalog.normalizeSeason(widget.season);
     _season = ProductCatalog.seasons.contains(normalizedSeason) ? normalizedSeason : 'summer';
@@ -94,7 +109,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _priceController.dispose();
     _discountPercentController.dispose();
     _salePriceController.dispose();
-    _stockQtyController.dispose();
     super.dispose();
   }
 
@@ -108,8 +122,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
     final price = double.tryParse(_priceController.text.trim());
     final discountText = _discountPercentController.text.trim();
     final saleText = _salePriceController.text.trim();
-    final stockQtyText = _stockQtyController.text.trim();
-    final stockQty = stockQtyText.isEmpty ? null : int.tryParse(stockQtyText);
 
     if (!ProductCatalog.isValidProductId(productId)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_invalid'))));
@@ -136,10 +148,28 @@ class _EditProductSheetState extends State<EditProductSheet> {
     final soldPrice = salePricing.soldPrice;
     final discountPercent = salePricing.discountPercent;
 
-    if (stockQtyText.isNotEmpty && (stockQty == null || stockQty < 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('stock_qty_invalid'))));
+    final branchStockError = BranchStockFieldValidation.validate(
+      values: _branchStock,
+      requireExplicitChoice: false,
+      acknowledgedBranches: ProductCatalog.branchIds.toSet(),
+    );
+    if (branchStockError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of(branchStockError))));
       return;
     }
+
+    final imageError = ProductImagesFieldValidation.validate(
+      keptUrls: _keptImageUrls,
+      newImages: _newProductImages,
+      barcodeImage: _barcodeImage,
+      hadBarcode: widget.hasBarcode,
+    );
+    if (imageError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of(imageError))));
+      return;
+    }
+
+    final branchStockSave = ProductCatalog.resolveBranchStockForSave(_branchStock);
 
     final result = <String, dynamic>{
       'productId': productId,
@@ -147,7 +177,13 @@ class _EditProductSheetState extends State<EditProductSheet> {
       'description': description,
       'size': size,
       'colors': colors.isEmpty ? FieldValue.delete() : colors,
-      if (stockQty == null) 'stockQty': FieldValue.delete() else 'stockQty': stockQty,
+      if (branchStockSave.branchStock == null) ...{
+        'branchStock': FieldValue.delete(),
+        'stockQty': FieldValue.delete(),
+      } else ...{
+        'branchStock': branchStockSave.branchStock,
+        'stockQty': branchStockSave.stockQty,
+      },
       'price': price,
       'season': _season,
       'ageGroup': _ageGroup,
@@ -174,6 +210,13 @@ class _EditProductSheetState extends State<EditProductSheet> {
       result['discountPercent'] = discountPercent;
       result['soldPrice'] = soldPrice;
     }
+    result['_imageUpdate'] = ProductImageUpdate(
+      keptImageUrls: _keptImageUrls,
+      removedImageUrls: _removedImageUrls,
+      newImages: _newProductImages,
+      newBarcodeImage: _barcodeImage,
+      hadBarcode: widget.hasBarcode || _barcodeImage != null,
+    );
     Navigator.pop(context, result);
   }
 
@@ -206,6 +249,17 @@ class _EditProductSheetState extends State<EditProductSheet> {
               textCapitalization: TextCapitalization.characters,
             ),
             const SizedBox(height: 12),
+            ProductImagesField(
+              initialImageUrls: widget.imageUrls,
+              hasExistingBarcode: widget.hasBarcode,
+              existingBarcodeUrl: widget.barcodeImageUrl,
+              showBarcodePreview: widget.showBarcodePreview,
+              onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
+              onNewImagesChanged: (images) => _newProductImages = images,
+              onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
+              onRemovedUrlsChanged: (urls) => _removedImageUrls = urls,
+            ),
+            const SizedBox(height: 12),
             TextField(controller: _titleController, decoration: InputDecoration(labelText: S.of('field_title'))),
             const SizedBox(height: 12),
             TextField(controller: _descController, decoration: InputDecoration(labelText: S.of('field_description')), maxLines: 3),
@@ -220,13 +274,9 @@ class _EditProductSheetState extends State<EditProductSheet> {
               onEncodedChanged: (value) => _colorsEncoded = value,
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _stockQtyController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: S.of('field_stock_qty'),
-                hintText: S.of('field_stock_qty_hint'),
-              ),
+            BranchStockField(
+              initialValues: widget.branchStock,
+              onChanged: (values) => _branchStock = values,
             ),
             const SizedBox(height: 12),
             TextField(

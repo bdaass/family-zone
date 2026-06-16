@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/product_catalog.dart';
+import 'product_image_service.dart';
 
 class ProductWriteService {
   static Future<bool> productDocExists(String productId) async {
@@ -32,17 +32,21 @@ class ProductWriteService {
     final oldSnap = await oldRef.get();
     if (!oldSnap.exists) throw StateError('product_not_found');
 
-    final merged = {...oldSnap.data()!, ...updates, 'productId': trimmedId};
-    String? imageUrl = merged['imageUrl']?.toString();
+    final oldData = oldSnap.data()!;
+    final merged = {...oldData, ...updates, 'productId': trimmedId};
 
     try {
-      final storageRef = FirebaseStorage.instance.ref().child('product_images/$docId.jpg');
-      final bytes = await storageRef.getData();
-      if (bytes != null) {
-        final newStorageRef = FirebaseStorage.instance.ref().child('product_images/$trimmedId.jpg');
-        await newStorageRef.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
-        imageUrl = await newStorageRef.getDownloadURL();
-        merged['imageUrl'] = imageUrl;
+      final copied = await ProductImageService.copyOnProductIdChange(
+        oldId: docId,
+        newId: trimmedId,
+        imageUrls: ProductCatalog.productImageUrlsFrom(merged),
+        barcodeImageUrl: ProductCatalog.barcodeImageUrlFrom(merged),
+      );
+      if (copied.imageUrls.isNotEmpty || copied.barcodeUrl != null) {
+        merged.addAll(ProductCatalog.imageFieldsForWrite(
+          imageUrls: copied.imageUrls,
+          barcodeImageUrl: copied.barcodeUrl,
+        ));
       }
     } catch (e, st) {
       debugPrint('ProductWriteService: image copy skipped: $e\n$st');
