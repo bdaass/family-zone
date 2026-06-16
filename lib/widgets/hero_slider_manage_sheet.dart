@@ -1,5 +1,4 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -29,6 +28,7 @@ class HeroSliderManageSheet extends StatefulWidget {
   }) {
     return showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: AppColors.cream,
       shape: const RoundedRectangleBorder(
@@ -114,7 +114,6 @@ class _HeroSliderManageSheetState extends State<HeroSliderManageSheet> {
       if (mounted) {
         final detail = switch (e) {
           FirebaseException(:final message) => message,
-          FirebaseAuthException(:final message) => message,
           StateError(:final message) => message,
           _ => '$e',
         };

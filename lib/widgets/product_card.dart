@@ -79,13 +79,17 @@ class _ProductCardItemState extends State<ProductCardItem> {
 
   @override
   Widget build(BuildContext context) {
+    final imageUrls = ProductCatalog.productImageUrlsFrom({
+      'imageUrls': widget.imageUrls,
+      'imageUrl': widget.imageUrl,
+    });
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
-        transform: Matrix4.translationValues(0, _hovered ? -4 : 0, 0),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
@@ -101,7 +105,10 @@ class _ProductCardItemState extends State<ProductCardItem> {
           child: Material(
             color: AppColors.white,
             child: InkWell(
-              onTap: widget.onTap,
+              onTap: () {
+                if (_hovered) setState(() => _hovered = false);
+                widget.onTap?.call();
+              },
               borderRadius: BorderRadius.circular(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,9 +119,9 @@ class _ProductCardItemState extends State<ProductCardItem> {
                       children: [
                         ColoredBox(
                           color: AppColors.creamDark,
-                          child: ProductImageCarousel(
-                            imageUrls: widget.imageUrls.isNotEmpty ? widget.imageUrls : [widget.imageUrl],
-                            autoPlay: true,
+                          child: ProductThumbnail(
+                            imageUrl: imageUrls.isEmpty ? '' : imageUrls.first,
+                            extraPhotoCount: imageUrls.length > 1 ? imageUrls.length - 1 : 0,
                           ),
                         ),
                         if (widget.isHidden)

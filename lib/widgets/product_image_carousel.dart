@@ -6,6 +6,57 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_image_settings.dart';
 
+/// Single product photo for grids and lists (no carousel timers).
+class ProductThumbnail extends StatelessWidget {
+  final String imageUrl;
+  final int extraPhotoCount;
+  final BoxFit fit;
+
+  const ProductThumbnail({
+    super.key,
+    required this.imageUrl,
+    this.extraPhotoCount = 0,
+    this.fit = BoxFit.cover,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ProductNetworkImage(url: imageUrl, fit: fit),
+        if (extraPhotoCount > 0)
+          Positioned(
+            right: 10,
+            bottom: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.ink.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.photo_library_rounded, size: 12, color: AppColors.white),
+                  const SizedBox(width: 4),
+                  Text(
+                    '+$extraPhotoCount',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Cycles through product photos (public images only — no barcode).
 class ProductImageCarousel extends StatefulWidget {
   final List<String> imageUrls;
@@ -95,7 +146,7 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
             controller: _pageController,
             itemCount: _urls.length,
             onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (context, i) => _NetworkImage(url: _urls[i], fit: widget.fit),
+            itemBuilder: (context, i) => ProductNetworkImage(url: _urls[i], fit: widget.fit),
           ),
           if (widget.showIndicators && _urls.length > 1) _dots(),
         ],
@@ -107,7 +158,7 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
       children: [
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 500),
-          child: _NetworkImage(
+          child: ProductNetworkImage(
             key: ValueKey(_urls[_index]),
             url: _urls[_index],
             fit: widget.fit,
@@ -144,14 +195,17 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
   }
 }
 
-class _NetworkImage extends StatelessWidget {
+class ProductNetworkImage extends StatelessWidget {
   final String url;
   final BoxFit fit;
 
-  const _NetworkImage({super.key, required this.url, required this.fit});
+  const ProductNetworkImage({super.key, required this.url, required this.fit});
 
   @override
   Widget build(BuildContext context) {
+    if (url.trim().isEmpty) {
+      return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 32));
+    }
     return Image.network(
       url,
       fit: fit,

@@ -18,6 +18,14 @@ void main() {
       expect(stock['elminieh'], isNull);
       expect(stock['halba'], isNull);
     });
+
+    test('legacy stockQty does not recurse with stockQtyFrom', () {
+      expect(ProductCatalog.stockQtyFrom({'stockQty': 12}), 12);
+      expect(
+        ProductCatalog.branchStockFrom({'stockQty': 12})['tripoli'],
+        ProductCatalog.stockQtyFrom({'stockQty': 12}),
+      );
+    });
   });
 
   group('resolveBranchStockForSave', () {

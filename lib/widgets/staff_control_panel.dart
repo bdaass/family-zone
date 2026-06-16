@@ -10,6 +10,7 @@ class StaffControlPanel extends StatelessWidget {
   final VoidCallback onToggleAddPanel;
   final VoidCallback onApprovalQueue;
   final VoidCallback onAnalytics;
+  final VoidCallback? onMigrateLegacy;
 
   const StaffControlPanel({
     super.key,
@@ -18,6 +19,7 @@ class StaffControlPanel extends StatelessWidget {
     required this.onToggleAddPanel,
     required this.onApprovalQueue,
     required this.onAnalytics,
+    this.onMigrateLegacy,
   });
 
   @override
@@ -82,6 +84,12 @@ class StaffControlPanel extends StatelessWidget {
                   icon: Icons.insights_rounded,
                   onTap: onAnalytics,
                 ),
+                if (userRole == 'admin' && onMigrateLegacy != null)
+                  _ActionChip(
+                    label: S.of('staff_migrate_legacy'),
+                    icon: Icons.sync_rounded,
+                    onTap: onMigrateLegacy!,
+                  ),
               ],
             ),
           ],

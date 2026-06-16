@@ -293,7 +293,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _season,
+              key: ValueKey(_season),
+              initialValue: _season,
               decoration: InputDecoration(labelText: S.of('field_season')),
               items: ProductCatalog.seasons.map((s) => DropdownMenuItem(value: s, child: Text(ProductCatalog.label(s)))).toList(),
               onChanged: (v) => setState(() => _season = v!),
@@ -307,7 +308,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _type,
+              key: ValueKey(_type),
+              initialValue: _type,
               decoration: InputDecoration(labelText: S.of('field_category')),
               items: ProductCatalog.types.map((t) => DropdownMenuItem(value: t, child: Text(ProductCatalog.label(t)))).toList(),
               onChanged: (v) => setState(() => _type = v!),

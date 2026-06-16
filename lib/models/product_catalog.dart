@@ -550,35 +550,35 @@ class ProductCatalog {
   static String branchLabel(String branchId) =>
       StoreConfig.branchLabel(branchId, isArabic: S.isAr);
 
+  static int? _optionalIntFrom(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    if (raw is double) return raw.toInt();
+    return int.tryParse(raw.toString());
+  }
+
   /// Per-branch quantity. Missing key = not set. Legacy `stockQty` maps to Tripoli only.
   static Map<String, int?> branchStockFrom(Map<String, dynamic> data) {
     final result = <String, int?>{for (final id in branchIds) id: null};
     final raw = data['branchStock'];
     if (raw is Map) {
       for (final id in branchIds) {
-        final value = raw[id];
-        if (value == null) continue;
-        if (value is int) {
-          result[id] = value;
-        } else if (value is double) {
-          result[id] = value.toInt();
-        } else {
-          result[id] = int.tryParse(value.toString());
-        }
+        result[id] = _optionalIntFrom(raw[id]);
       }
       return result;
     }
 
-    final legacy = stockQtyFrom(data);
+    final legacy = _optionalIntFrom(data['stockQty']);
     if (legacy != null) result['tripoli'] = legacy;
     return result;
   }
 
   static int? totalStockFrom(Map<String, dynamic> data) {
-    final stored = stockQtyFrom(data);
+    final stored = _optionalIntFrom(data['stockQty']);
+    if (stored != null) return stored;
     final branches = branchStockFrom(data);
     final values = branches.values.whereType<int>();
-    if (values.isEmpty) return stored;
+    if (values.isEmpty) return null;
     return values.fold<int>(0, (sum, qty) => sum + qty);
   }
 
@@ -601,14 +601,13 @@ class ProductCatalog {
   }
 
   static int? stockQtyFrom(Map<String, dynamic> data) {
-    final total = data['stockQty'];
-    if (total != null) {
-      if (total is int) return total;
-      if (total is double) return total.toInt();
-      return int.tryParse(total.toString());
-    }
-    final branches = branchStockFrom(data);
-    final values = branches.values.whereType<int>();
+    final stored = _optionalIntFrom(data['stockQty']);
+    if (stored != null) return stored;
+
+    final raw = data['branchStock'];
+    if (raw is! Map) return null;
+
+    final values = branchIds.map((id) => _optionalIntFrom(raw[id])).whereType<int>();
     if (values.isEmpty) return null;
     return values.fold<int>(0, (sum, qty) => sum + qty);
   }

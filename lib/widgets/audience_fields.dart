@@ -50,7 +50,8 @@ class AudienceFields extends StatelessWidget {
       children: [
         Expanded(
           child: DropdownButtonFormField<String>(
-            value: _isAgeValue(ageGroup) ? ageGroup : null,
+            key: ValueKey('age-$ageGroup'),
+            initialValue: _isAgeValue(ageGroup) ? ageGroup : null,
             decoration: InputDecoration(labelText: S.of('field_age_group'), isDense: dense),
             hint: requireExplicitChoice
                 ? Text(S.of('field_please_select'), style: textStyle.copyWith(color: Colors.grey))
@@ -74,7 +75,8 @@ class AudienceFields extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: DropdownButtonFormField<String>(
-            value: _isSexValue(sex) ? sex : null,
+            key: ValueKey('sex-$sex'),
+            initialValue: _isSexValue(sex) ? sex : null,
             decoration: InputDecoration(labelText: S.of('field_sex'), isDense: dense),
             hint: requireExplicitChoice
                 ? Text(S.of('field_please_select'), style: textStyle.copyWith(color: Colors.grey))

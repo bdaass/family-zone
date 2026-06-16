@@ -20,7 +20,8 @@
       "collectionGroup": "products",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "searchIdPrefix", "order": "ASCENDING" }
+        { "fieldPath": "visibility", "order": "ASCENDING" },
+        { "fieldPath": "searchPrefix", "order": "ASCENDING" }
       ]
     },
     {

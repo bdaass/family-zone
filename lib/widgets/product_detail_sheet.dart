@@ -125,9 +125,12 @@ class ProductDetailSheet extends StatefulWidget {
     );
 
     final isWide = MediaQuery.sizeOf(context).width > 720;
-    if (isWide) {
+    final useDialog = isWide || kIsWeb;
+    if (useDialog) {
       return showDialog(
         context: context,
+        useRootNavigator: true,
+        barrierDismissible: true,
         barrierColor: AppColors.ink.withValues(alpha: 0.45),
         builder: (ctx) => Dialog(
           backgroundColor: AppColors.cream,
@@ -146,6 +149,7 @@ class ProductDetailSheet extends StatefulWidget {
 
     return showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => DraggableScrollableSheet(
@@ -281,7 +285,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 imageUrls: widget.imageUrls.isNotEmpty ? widget.imageUrls : [widget.imageUrl],
                 interactive: true,
                 showIndicators: true,
-                autoPlay: true,
               ),
             ),
             ..._buildLeftBadges(),

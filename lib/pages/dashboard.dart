@@ -13,6 +13,7 @@ import '../models/product_catalog.dart';
 import '../models/top_slider_slide.dart';
 import '../services/favorite_service.dart';
 import '../services/product_catalog_service.dart';
+import '../services/catalog_migration_service.dart';
 import '../services/product_image_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/hero_slider_settings.dart';
@@ -303,6 +304,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void _showFilterSheet() {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => FilterBottomSheet(
@@ -368,6 +370,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Future<void> _editProduct(String docId, Map<String, dynamic> data) async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: AppColors.white,
       shape: const RoundedRectangleBorder(
@@ -501,6 +504,42 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     StaffAnalyticsSheet.show(context);
   }
 
+  Future<void> _migrateLegacyProducts() async {
+    if (userRole != 'admin') return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.of('staff_migrate_legacy_title')),
+        content: Text(S.of('staff_migrate_legacy_body')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.of('cancel'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.of('ok'))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final result = await CatalogMigrationService.normalizeLegacyProducts();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(S.fmt('staff_migrate_legacy_done', {
+            'updated': '${result.updated}',
+            'total': '${result.total}',
+          })),
+        ),
+      );
+      _reloadCatalog();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.fmt('staff_migrate_legacy_failed', {'error': '$e'}))),
+      );
+    }
+  }
+
   Future<void> _tryOpenPendingProductLink() async {
     if (_pendingLinkHandled || _pendingProductLink == null || !_authResolved) return;
 
@@ -628,6 +667,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void _showAuthModal() {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: AppColors.white,
       shape: const RoundedRectangleBorder(
@@ -681,6 +721,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                                   onToggleAddPanel: () => setState(() => _staffAddPanelOpen = !_staffAddPanelOpen),
                                   onApprovalQueue: _showApprovalQueue,
                                   onAnalytics: _showStaffAnalytics,
+                                  onMigrateLegacy: userRole == 'admin' ? _migrateLegacyProducts : null,
                                 ),
                                 AnimatedCrossFade(
                                   firstChild: const SizedBox(width: double.infinity, height: 0),
@@ -1145,6 +1186,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       tween: Tween(begin: 0.0, end: 1.0),
                       curve: Curves.easeOutCubic,
                       builder: (context, value, child) {
+                        if (kIsWeb) {
+                          return Opacity(opacity: value, child: child);
+                        }
                         return Opacity(
                           opacity: value,
                           child: Transform.translate(

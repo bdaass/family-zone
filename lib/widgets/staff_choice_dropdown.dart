@@ -48,7 +48,8 @@ class StaffChoiceDropdown extends StatelessWidget {
     ];
 
     return DropdownButtonFormField<String>(
-      value: _isValidValue(value) ? value : null,
+      key: ValueKey('$label-$value'),
+      initialValue: _isValidValue(value) ? value : null,
       decoration: InputDecoration(
         labelText: label,
         isDense: dense,
