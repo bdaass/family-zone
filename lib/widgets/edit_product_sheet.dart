@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'audience_fields.dart';
 import 'color_input_field.dart';
 import 'size_input_field.dart';
+import 'sale_pricing_fields.dart';
 
 class EditProductSheet extends StatefulWidget {
   final String productId;
@@ -16,6 +17,7 @@ class EditProductSheet extends StatefulWidget {
   final String colors;
   final int? stockQty;
   final double price;
+  final int? discountPercent;
   final double? soldPrice;
   final String season;
   final String ageGroup;
@@ -31,6 +33,7 @@ class EditProductSheet extends StatefulWidget {
     this.colors = '',
     this.stockQty,
     required this.price,
+    this.discountPercent,
     this.soldPrice,
     required this.season,
     required this.ageGroup,
@@ -49,7 +52,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
   late final TextEditingController _priceController;
   late String _sizesEncoded;
   late String _colorsEncoded;
-  late final TextEditingController _soldPriceController;
+  late final TextEditingController _discountPercentController;
+  late final TextEditingController _salePriceController;
   late final TextEditingController _stockQtyController;
   late String _season;
   late String _ageGroup;
@@ -65,13 +69,17 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _sizesEncoded = widget.size;
     _colorsEncoded = widget.colors;
     _priceController = TextEditingController(text: widget.price.toStringAsFixed(2));
-    _soldPriceController = TextEditingController(
+    _discountPercentController = TextEditingController(
+      text: widget.discountPercent?.toString() ?? '',
+    );
+    _salePriceController = TextEditingController(
       text: widget.soldPrice != null ? widget.soldPrice!.toStringAsFixed(2) : '',
     );
     _stockQtyController = TextEditingController(
       text: widget.stockQty != null ? '${widget.stockQty}' : '',
     );
-    _season = ProductCatalog.seasons.contains(widget.season) ? widget.season : 'summer';
+    final normalizedSeason = ProductCatalog.normalizeSeason(widget.season);
+    _season = ProductCatalog.seasons.contains(normalizedSeason) ? normalizedSeason : 'summer';
     _ageGroup = ProductCatalog.normalizeAgeGroup(widget.ageGroup);
     _sex = ProductCatalog.normalizeSex(widget.sex);
     _type = ProductCatalog.normalizeType(widget.type);
@@ -84,7 +92,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _titleController.dispose();
     _descController.dispose();
     _priceController.dispose();
-    _soldPriceController.dispose();
+    _discountPercentController.dispose();
+    _salePriceController.dispose();
     _stockQtyController.dispose();
     super.dispose();
   }
@@ -97,8 +106,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
     final size = ProductCatalog.encodeSizes(sizes);
     final colors = ProductCatalog.encodeColors(ProductCatalog.colorsFromField(_colorsEncoded));
     final price = double.tryParse(_priceController.text.trim());
-    final soldPriceText = _soldPriceController.text.trim();
-    final soldPrice = soldPriceText.isEmpty ? null : double.tryParse(soldPriceText);
+    final discountText = _discountPercentController.text.trim();
+    final saleText = _salePriceController.text.trim();
     final stockQtyText = _stockQtyController.text.trim();
     final stockQty = stockQtyText.isEmpty ? null : int.tryParse(stockQtyText);
 
@@ -112,12 +121,21 @@ class _EditProductSheetState extends State<EditProductSheet> {
       );
       return;
     }
-    if (soldPriceText.isNotEmpty && (soldPrice == null || soldPrice >= price)) {
+    final salePricing = ProductCatalog.resolveSalePricing(
+      regularPrice: price,
+      salePriceText: saleText,
+      discountPercentText: discountText,
+    );
+    if (salePricing.errorKey != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of('sale_price_invalid'))),
+        SnackBar(content: Text(S.of(salePricing.errorKey!))),
       );
       return;
     }
+
+    final soldPrice = salePricing.soldPrice;
+    final discountPercent = salePricing.discountPercent;
+
     if (stockQtyText.isNotEmpty && (stockQty == null || stockQty < 0)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('stock_qty_invalid'))));
       return;
@@ -149,9 +167,11 @@ class _EditProductSheetState extends State<EditProductSheet> {
         type: _type,
       ),
     };
-    if (soldPrice == null) {
+    if (discountPercent == null) {
+      result['discountPercent'] = FieldValue.delete();
       result['soldPrice'] = FieldValue.delete();
     } else {
+      result['discountPercent'] = discountPercent;
       result['soldPrice'] = soldPrice;
     }
     Navigator.pop(context, result);
@@ -213,15 +233,13 @@ class _EditProductSheetState extends State<EditProductSheet> {
               controller: _priceController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(labelText: S.of('field_regular_price')),
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _soldPriceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: S.of('field_sale_price'),
-                hintText: S.of('field_sale_price_empty_hint'),
-              ),
+            SalePricingFields(
+              regularPriceController: _priceController,
+              salePriceController: _salePriceController,
+              discountPercentController: _discountPercentController,
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -234,8 +252,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
             AudienceFields(
               ageGroup: _ageGroup,
               sex: _sex,
-              onAgeGroupChanged: (v) => setState(() => _ageGroup = v),
-              onSexChanged: (v) => setState(() => _sex = v),
+              onAgeGroupChanged: (v) => setState(() => _ageGroup = v ?? _ageGroup),
+              onSexChanged: (v) => setState(() => _sex = v ?? _sex),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(

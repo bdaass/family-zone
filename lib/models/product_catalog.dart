@@ -2,15 +2,25 @@ import '../l10n/app_strings.dart';
 
 /// Shared product categories, filters, and field helpers.
 class ProductCatalog {
-  static const seasons = ['summer', 'winter', 'sport', 'all seasons'];
-  static const ageGroups = ['kids', 'adult'];
+  static const seasons = ['summer', 'winter', 'sport', 'all_seasons'];
+  static const ageGroups = ['adult', 'kids', 'baby'];
   static const sexes = ['female', 'male'];
   static const types = ['clothes', 'shoes', 'lingery', 'sac', 'scarf'];
 
-  static const filterSeasons = ['All Seasons', 'Summer', 'Winter', 'Sport'];
-  static const filterAgeGroups = ['All', 'Kids', 'Adult'];
+  static const filterSeasons = ['All Seasons', 'Summer', 'Winter', 'Sport', 'All Year'];
+  static const filterAgeGroups = ['All', 'Adult', 'Kids', 'Baby'];
   static const filterSexes = ['All', 'Female', 'Male'];
   static const filterCategories = ['All Categories', 'Clothes', 'Shoes', 'Lingery', 'Sac', 'Scarf'];
+
+  /// Stored on products when staff has not decided yet (add form).
+  static const notDetermined = 'not_determined';
+
+  static bool isNotDetermined(String? raw) {
+    final v = (raw ?? '').toLowerCase().trim().replaceAll(' ', '_');
+    return v == notDetermined || v == 'notdetermined';
+  }
+
+  static String notDeterminedLabel() => S.of('choice_not_determined');
 
   static final RegExp _productIdPattern = RegExp(r'^[A-Za-z0-9]+$');
 
@@ -19,13 +29,31 @@ class ProductCatalog {
     return trimmed.isNotEmpty && trimmed.length <= 64 && _productIdPattern.hasMatch(trimmed);
   }
 
+  /// True when the search term should use product-ID lookup (contains a digit).
+  static bool isIdSearchTerm(String token) {
+    final trimmed = token.trim();
+    if (!isValidProductId(trimmed)) return false;
+    return RegExp(r'\d').hasMatch(trimmed);
+  }
+
+  static String normalizedIdSearch(String query) => query.trim().toLowerCase();
+
   static String normalizeAgeGroup(String? raw) {
+    if (isNotDetermined(raw)) return notDetermined;
     final v = (raw ?? '').toLowerCase().trim();
+    if (v == 'baby' || v == 'infant' || v == 'babies') return 'baby';
     if (v == 'kids' || v == 'kid' || v == 'children' || v == 'child') return 'kids';
     return 'adult';
   }
 
+  static bool usesChildSexLabels(String ageGroup) {
+    if (isNotDetermined(ageGroup)) return false;
+    final group = normalizeAgeGroup(ageGroup);
+    return group == 'kids' || group == 'baby';
+  }
+
   static String normalizeSex(String? raw) {
+    if (isNotDetermined(raw)) return notDetermined;
     final v = (raw ?? '').toLowerCase().trim();
     if (v == 'male' || v == 'man' || v == 'boy' || v == 'm') return 'male';
     return 'female';
@@ -52,20 +80,24 @@ class ProductCatalog {
   }
 
   static String ageGroupLabel(String ageGroup) {
+    if (isNotDetermined(ageGroup)) return notDeterminedLabel();
     switch (normalizeAgeGroup(ageGroup)) {
       case 'kids':
         return S.of('age_kids');
+      case 'baby':
+        return S.of('age_baby');
       default:
         return S.of('age_adult');
     }
   }
 
   static String sexFormLabel({required String ageGroup, required String sex}) {
-    final isKids = normalizeAgeGroup(ageGroup) == 'kids';
+    if (isNotDetermined(sex)) return notDeterminedLabel();
+    final childLabels = usesChildSexLabels(ageGroup);
     if (normalizeSex(sex) == 'male') {
-      return isKids ? S.of('sex_boy') : S.of('sex_man');
+      return childLabels ? S.of('sex_boy') : S.of('sex_man');
     }
-    return isKids ? S.of('sex_girl') : S.of('sex_woman');
+    return childLabels ? S.of('sex_girl') : S.of('sex_woman');
   }
 
   static String audienceLabelFromData(Map<String, dynamic> data) {
@@ -78,11 +110,11 @@ class ProductCatalog {
       case 'All':
         return S.of('gender_all');
       case 'Female':
-        if (ageGroupFilter == 'Kids') return S.of('sex_girl');
+        if (ageGroupFilter == 'Kids' || ageGroupFilter == 'Baby') return S.of('sex_girl');
         if (ageGroupFilter == 'Adult') return S.of('sex_woman');
         return S.of('filter_sex_female');
       case 'Male':
-        if (ageGroupFilter == 'Kids') return S.of('sex_boy');
+        if (ageGroupFilter == 'Kids' || ageGroupFilter == 'Baby') return S.of('sex_boy');
         if (ageGroupFilter == 'Adult') return S.of('sex_man');
         return S.of('filter_sex_male');
       default:
@@ -96,6 +128,8 @@ class ProductCatalog {
         return S.of('gender_all');
       case 'Kids':
         return S.of('age_kids');
+      case 'Baby':
+        return S.of('age_baby');
       case 'Adult':
         return S.of('age_adult');
       default:
@@ -129,6 +163,7 @@ class ProductCatalog {
   static String label(String value) => localizedCatalogLabel(value);
 
   static String localizedCatalogLabel(String value) {
+    if (isNotDetermined(value)) return notDeterminedLabel();
     switch (value.toLowerCase()) {
       case 'summer':
         return S.of('catalog_summer');
@@ -136,6 +171,7 @@ class ProductCatalog {
         return S.of('catalog_winter');
       case 'sport':
         return S.of('catalog_sport');
+      case 'all_seasons':
       case 'all seasons':
         return S.of('catalog_all_seasons');
       case 'woman':
@@ -152,6 +188,8 @@ class ProductCatalog {
       case 'kids':
       case 'kid':
         return S.of('age_kids');
+      case 'baby':
+        return S.of('age_baby');
       case 'adult':
         return S.of('age_adult');
       case 'clothes':
@@ -185,6 +223,8 @@ class ProductCatalog {
         return S.of('season_winter');
       case 'Sport':
         return S.of('season_sport');
+      case 'All Year':
+        return S.of('season_all_year');
       case 'All Categories':
         return S.of('category_all');
       case 'Clothes':
@@ -214,6 +254,8 @@ class ProductCatalog {
         return S.of('category_scarves');
       case 'All Seasons':
         return S.of('filter_all_seasons');
+      case 'All Year':
+        return S.of('filter_all_year');
       case 'All Categories':
         return S.of('filter_all_categories');
       default:
@@ -222,31 +264,50 @@ class ProductCatalog {
   }
 
   static String normalizeType(String? raw) {
+    if (isNotDetermined(raw)) return notDetermined;
     final v = (raw ?? '').toLowerCase().trim();
     if (v == 'sacs') return 'sac';
     return v;
   }
 
-  static String normalizeSeason(String? raw) => (raw ?? '').toLowerCase().trim();
+  static String normalizeSeason(String? raw) {
+    if (isNotDetermined(raw)) return notDetermined;
+    final v = (raw ?? '').toLowerCase().trim();
+    if (v == 'all seasons' || v == 'all_seasons' || v == 'allseasons') {
+      return 'all_seasons';
+    }
+    return v;
+  }
 
-  /// All Seasons → everything. Summer → summer + all seasons items, etc.
+  static bool isAllSeasonsProduct(String? stored) => normalizeSeason(stored) == 'all_seasons';
+
+  /// All Seasons → everything. Summer → summer + all_seasons items, etc.
   static bool matchesSeason(String? stored, String filterLabel) {
     if (filterLabel == 'All Seasons') return true;
+    if (isNotDetermined(stored)) return false;
     final itemSeason = normalizeSeason(stored);
+    if (filterLabel == 'All Year') return itemSeason == 'all_seasons';
     final filter = filterLabel.toLowerCase();
-    return itemSeason == filter || itemSeason == 'all seasons';
+    return itemSeason == filter || itemSeason == 'all_seasons';
   }
 
   static bool matchesAgeGroupFilter(Map<String, dynamic> data, String filterLabel) {
     if (filterLabel == 'All') return true;
     final audience = audienceFrom(data);
-    final target = filterLabel == 'Kids' ? 'kids' : 'adult';
+    if (isNotDetermined(audience.ageGroup)) return false;
+    final target = switch (filterLabel) {
+      'Kids' => 'kids',
+      'Baby' => 'baby',
+      'Adult' => 'adult',
+      _ => '',
+    };
     return audience.ageGroup == target;
   }
 
   static bool matchesSexFilter(Map<String, dynamic> data, String filterLabel) {
     if (filterLabel == 'All') return true;
     final audience = audienceFrom(data);
+    if (isNotDetermined(audience.sex)) return false;
     if (audience.legacyChildrenOnly && audience.ageGroup == 'kids') return true;
     final target = filterLabel == 'Male' ? 'male' : 'female';
     return audience.sex == target;
@@ -255,6 +316,7 @@ class ProductCatalog {
   /// All Categories → everything. Clothes → clothes only, etc.
   static bool matchesType(String? stored, String filterLabel) {
     if (filterLabel == 'All Categories') return true;
+    if (isNotDetermined(stored)) return false;
     return normalizeType(stored) == normalizeType(filterLabel);
   }
 
@@ -284,6 +346,15 @@ class ProductCatalog {
   }) {
     final normalized = query.trim().toLowerCase();
     if (normalized.isEmpty) return true;
+
+    final terms = normalized.split(RegExp(r'\s+')).where((token) => token.isNotEmpty).toList();
+    final productId = productIdFrom(data, docId).toLowerCase();
+    final documentId = docId.toLowerCase();
+
+    if (terms.length == 1 && isIdSearchTerm(terms.first)) {
+      final term = terms.first;
+      return productId.contains(term) || documentId.contains(term);
+    }
 
     final season = normalizeSeason(data['season']?.toString());
     final audience = audienceFrom(data);
@@ -377,7 +448,10 @@ class ProductCatalog {
 
   static String encodeSizes(Iterable<String> sizes) => encodeListField(sizes);
 
-  static List<String> colorsFromField(String? raw) => listFromField(raw);
+  static List<String> colorsFromField(String? raw) {
+    if (isNotDetermined(raw)) return const [];
+    return listFromField(raw);
+  }
 
   static String encodeColors(Iterable<String> colors) => encodeListField(colors);
 
@@ -396,6 +470,7 @@ class ProductCatalog {
   }
 
   static String colorsDisplayLabel(String? raw, {int maxShown = 4}) {
+    if (isNotDetermined(raw)) return notDeterminedLabel();
     final colors = colorsFromField(raw);
     if (colors.isEmpty) return '';
     if (colors.length <= maxShown) return colors.join(' · ');
@@ -443,12 +518,103 @@ class ProductCatalog {
 
   static double priceFrom(Map<String, dynamic> data) => (data['price'] ?? 0.0).toDouble();
 
-  static double? soldPriceFrom(Map<String, dynamic> data) {
+  static int? discountPercentFrom(Map<String, dynamic> data) {
+    final raw = data['discountPercent'];
+    if (raw != null) {
+      final parsed = raw is int ? raw : int.tryParse(raw.toString());
+      if (isValidDiscountPercent(parsed)) return parsed;
+    }
+    final price = priceFrom(data);
+    final legacySold = legacySoldPriceFrom(data);
+    if (legacySold != null && price > 0 && legacySold < price) {
+      return percentFromPrices(price, legacySold);
+    }
+    return null;
+  }
+
+  /// Parses staff input like `20` or `20%`. Returns null when empty.
+  static int? parseDiscountPercent(String text) {
+    final cleaned = text.trim().replaceAll('%', '').trim();
+    if (cleaned.isEmpty) return null;
+    final parsed = int.tryParse(cleaned);
+    return isValidDiscountPercent(parsed) ? parsed : null;
+  }
+
+  static bool isValidDiscountPercent(int? percent) => percent != null && percent > 0 && percent < 100;
+
+  static int? percentFromPrices(double price, double soldPrice) {
+    if (price <= 0 || soldPrice <= 0 || soldPrice >= price) return null;
+    final percent = ((1 - soldPrice / price) * 100).round();
+    return isValidDiscountPercent(percent) ? percent : null;
+  }
+
+  static double soldPriceFromPercent(double price, int discountPercent) {
+    final discounted = price * (1 - discountPercent / 100);
+    return (discounted * 100).roundToDouble() / 100;
+  }
+
+  /// Resolves sale fields from optional sale price and/or discount percent input.
+  static ({double? soldPrice, int? discountPercent, String? errorKey}) resolveSalePricing({
+    required double regularPrice,
+    required String salePriceText,
+    required String discountPercentText,
+  }) {
+    final saleText = salePriceText.trim();
+    final discountText = discountPercentText.trim();
+    final saleParsed = saleText.isEmpty ? null : double.tryParse(saleText);
+    final discountParsed = parseDiscountPercent(discountText);
+
+    if (saleText.isEmpty && discountText.isEmpty) {
+      return (soldPrice: null, discountPercent: null, errorKey: null);
+    }
+
+    if (saleText.isNotEmpty && (saleParsed == null || saleParsed <= 0)) {
+      return (soldPrice: null, discountPercent: null, errorKey: 'sale_price_invalid');
+    }
+    if (discountText.isNotEmpty && discountParsed == null) {
+      return (soldPrice: null, discountPercent: null, errorKey: 'discount_percent_invalid');
+    }
+    if (saleParsed != null && saleParsed >= regularPrice) {
+      return (soldPrice: null, discountPercent: null, errorKey: 'sale_price_invalid');
+    }
+
+    if (discountParsed != null && saleParsed == null) {
+      return (
+        soldPrice: soldPriceFromPercent(regularPrice, discountParsed),
+        discountPercent: discountParsed,
+        errorKey: null,
+      );
+    }
+
+    if (saleParsed != null && discountParsed == null) {
+      final percent = percentFromPrices(regularPrice, saleParsed);
+      if (percent == null) {
+        return (soldPrice: null, discountPercent: null, errorKey: 'sale_price_invalid');
+      }
+      return (soldPrice: saleParsed, discountPercent: percent, errorKey: null);
+    }
+
+    // Both provided — sale price is source of truth; percent is derived.
+    final percent = percentFromPrices(regularPrice, saleParsed!);
+    if (percent == null) {
+      return (soldPrice: null, discountPercent: null, errorKey: 'sale_price_invalid');
+    }
+    return (soldPrice: saleParsed, discountPercent: percent, errorKey: null);
+  }
+
+  static double? legacySoldPriceFrom(Map<String, dynamic> data) {
     final raw = data['soldPrice'] ?? data['salePrice'];
     if (raw == null) return null;
     final parsed = raw is num ? raw.toDouble() : double.tryParse(raw.toString());
     if (parsed == null || parsed <= 0) return null;
     return parsed;
+  }
+
+  static double? soldPriceFrom(Map<String, dynamic> data) {
+    final price = priceFrom(data);
+    final percent = discountPercentFrom(data);
+    if (percent != null) return soldPriceFromPercent(price, percent);
+    return legacySoldPriceFrom(data);
   }
 
   static bool hasActiveSale(Map<String, dynamic> data) {
@@ -461,10 +627,42 @@ class ProductCatalog {
     return soldPrice != null && soldPrice > 0 && soldPrice < price;
   }
 
-  /// Firestore `whereIn` values for a season filter chip (includes "all seasons" items).
+  static const newProductMaxAgeDays = 10;
+  static const oldProductMonths = 6;
+
+  static DateTime? createdAtFrom(Map<String, dynamic> data) {
+    final raw = data['created_at'];
+    if (raw == null) return null;
+    if (raw is DateTime) return raw;
+    try {
+      return (raw as dynamic).toDate() as DateTime;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Listed within the last [newProductMaxAgeDays] days (exclusive of day 10+).
+  static bool isNewlyAdded(Map<String, dynamic> data, {DateTime? now}) {
+    final created = createdAtFrom(data);
+    if (created == null) return false;
+    final ref = now ?? DateTime.now();
+    return ref.difference(created).inDays < newProductMaxAgeDays;
+  }
+
+  /// Listed more than [oldProductMonths] months ago (admin inventory hint).
+  static bool isOlderThanSixMonths(Map<String, dynamic> data, {DateTime? now}) {
+    final created = createdAtFrom(data);
+    if (created == null) return false;
+    final ref = now ?? DateTime.now();
+    final cutoff = DateTime(ref.year, ref.month - oldProductMonths, ref.day);
+    return created.isBefore(cutoff);
+  }
+
+  /// Firestore `whereIn` values for a season filter chip (includes all-season items).
   static List<String> seasonsForFilter(String filterLabel) {
     if (filterLabel == 'All Seasons') return const [];
-    return [filterLabel.toLowerCase(), 'all seasons'];
+    if (filterLabel == 'All Year') return const ['all_seasons', 'all seasons'];
+    return [filterLabel.toLowerCase(), 'all_seasons', 'all seasons'];
   }
 
   /// Lowercase tokens for Firestore `arrayContains` search (max 30).
@@ -494,7 +692,7 @@ class ProductCatalog {
       ...colorsFromField(colors),
     ];
 
-    final tokens = <String>{};
+    final tokens = <String>{productId.trim().toLowerCase()};
     for (final part in parts) {
       for (final match in RegExp(r'[\w\u0600-\u06FF]+').allMatches(part.toLowerCase())) {
         final token = match.group(0)!;
@@ -502,7 +700,7 @@ class ProductCatalog {
       }
     }
 
-    final list = tokens.toList()..sort();
+    final list = tokens.where((t) => t.isNotEmpty).toList()..sort();
     if (list.length <= 30) return list;
     return list.sublist(0, 30);
   }
@@ -523,6 +721,7 @@ class ProductCatalog {
   }) {
     return {
       'searchPrefix': title.trim().toLowerCase(),
+      'searchIdPrefix': productId.trim().toLowerCase(),
       'searchTokens': buildSearchTokens(
         title: title,
         description: description,

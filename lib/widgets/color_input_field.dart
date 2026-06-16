@@ -9,12 +9,20 @@ class ColorInputField extends StatefulWidget {
   final String initialValue;
   final ValueChanged<String> onEncodedChanged;
   final bool dense;
+  final bool allowNotDetermined;
+  final bool notDeterminedSelected;
+  final VoidCallback? onNotDeterminedSelected;
+  final VoidCallback? onColorsSpecified;
 
   const ColorInputField({
     super.key,
     this.initialValue = '',
     required this.onEncodedChanged,
     this.dense = false,
+    this.allowNotDetermined = false,
+    this.notDeterminedSelected = false,
+    this.onNotDeterminedSelected,
+    this.onColorsSpecified,
   });
 
   @override
@@ -70,6 +78,14 @@ class _ColorInputFieldState extends State<ColorInputField> {
       _inputController.clear();
     });
     _notifyChange();
+    widget.onColorsSpecified?.call();
+  }
+
+  void _selectNotDetermined() {
+    setState(() => _colors.clear());
+    _inputController.clear();
+    widget.onEncodedChanged(ProductCatalog.notDetermined);
+    widget.onNotDeterminedSelected?.call();
   }
 
   void _removeColor(String color) {
@@ -93,6 +109,19 @@ class _ColorInputFieldState extends State<ColorInputField> {
           ),
         ),
         SizedBox(height: gap),
+        if (widget.allowNotDetermined) ...[
+          ActionChip(
+            label: Text(
+              ProductCatalog.notDeterminedLabel(),
+              style: TextStyle(fontSize: widget.dense ? 10 : 11, fontWeight: FontWeight.w700),
+            ),
+            onPressed: _selectNotDetermined,
+            backgroundColor: widget.notDeterminedSelected ? AppColors.ink : AppColors.white,
+            labelStyle: TextStyle(color: widget.notDeterminedSelected ? AppColors.white : AppColors.ink),
+            side: BorderSide(color: widget.notDeterminedSelected ? AppColors.ink : AppColors.creamDark),
+          ),
+          SizedBox(height: gap),
+        ],
         Wrap(
           spacing: 6,
           runSpacing: 6,

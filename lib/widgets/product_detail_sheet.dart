@@ -25,6 +25,9 @@ class ProductDetailSheet extends StatefulWidget {
   final bool isFavorited;
   final bool isSoldOut;
   final bool showProductId;
+  final bool isNew;
+  final bool isOld;
+  final bool showOldBadge;
   final VoidCallback? onFavoriteToggle;
   final VoidCallback? onAddToCart;
 
@@ -46,6 +49,9 @@ class ProductDetailSheet extends StatefulWidget {
     this.isFavorited = false,
     this.isSoldOut = false,
     this.showProductId = false,
+    this.isNew = false,
+    this.isOld = false,
+    this.showOldBadge = false,
     this.onFavoriteToggle,
     this.onAddToCart,
   });
@@ -68,6 +74,9 @@ class ProductDetailSheet extends StatefulWidget {
     bool isFavorited = false,
     bool isSoldOut = false,
     bool showProductId = false,
+    bool isNew = false,
+    bool isOld = false,
+    bool showOldBadge = false,
     VoidCallback? onFavoriteToggle,
     VoidCallback? onAddToCart,
   }) {
@@ -88,6 +97,9 @@ class ProductDetailSheet extends StatefulWidget {
       isFavorited: isFavorited,
       isSoldOut: isSoldOut,
       showProductId: showProductId,
+      isNew: isNew,
+      isOld: isOld,
+      showOldBadge: showOldBadge,
       onFavoriteToggle: onFavoriteToggle,
       onAddToCart: onAddToCart,
     );
@@ -251,12 +263,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 child: _DetailImage(imageUrl: widget.imageUrl),
               ),
             ),
-            if (_onSale)
-              Positioned(
-                top: 14,
-                left: 14,
-                child: _badge(S.of('badge_sale'), AppColors.coral),
-              ),
+            ..._buildLeftBadges(),
             if (widget.isSoldOut)
               Container(
                 color: AppColors.ink.withValues(alpha: 0.45),
@@ -451,6 +458,23 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         ),
       ],
     );
+  }
+
+  List<Widget> _buildLeftBadges() {
+    final badges = <({String label, Color color})>[];
+    if (widget.isNew) badges.add((label: S.of('badge_new'), color: AppColors.violet));
+    if (_onSale) badges.add((label: S.of('badge_sale'), color: AppColors.coral));
+    if (widget.showOldBadge && widget.isOld) {
+      badges.add((label: S.of('badge_old_6'), color: AppColors.inkMuted));
+    }
+    return [
+      for (var i = 0; i < badges.length; i++)
+        Positioned(
+          top: 14 + i * 30.0,
+          left: 14,
+          child: _badge(badges[i].label, badges[i].color),
+        ),
+    ];
   }
 
   Widget _badge(String label, Color color) {

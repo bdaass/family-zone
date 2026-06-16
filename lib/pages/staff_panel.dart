@@ -13,7 +13,11 @@ import '../services/product_write_service.dart';
 import '../utils/image_compressor.dart';
 import '../widgets/audience_fields.dart';
 import '../widgets/color_input_field.dart';
+import '../widgets/sale_pricing_fields.dart';
 import '../widgets/size_input_field.dart';
+import '../widgets/staff_choice_dropdown.dart';
+
+enum _FieldChoice { unset, notDetermined, specified }
 
 class StaffManagementPanel extends StatefulWidget {
   final String userRole;
@@ -32,17 +36,91 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   String _colorsEncoded = '';
   int _sizeInputKey = 0;
   int _colorInputKey = 0;
-  final _soldPriceController = TextEditingController();
+  final _discountPercentController = TextEditingController();
+  final _salePriceController = TextEditingController();
   final _stockQtyController = TextEditingController();
 
   Uint8List? _imageBytes;
   bool _isCompressing = false;
   bool _isUploading = false;
 
-  String _formSeason = 'summer';
-  String _formAgeGroup = 'adult';
-  String _formSex = 'female';
-  String _formType = 'clothes';
+  String? _formSeason;
+  String? _formAgeGroup;
+  String? _formSex;
+  String? _formType;
+  _FieldChoice _colorChoice = _FieldChoice.unset;
+  _FieldChoice _stockChoice = _FieldChoice.unset;
+
+  bool get _strictForm => widget.userRole == 'employee';
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_strictForm) {
+      _formSeason = 'summer';
+      _formAgeGroup = 'adult';
+      _formSex = 'female';
+      _formType = 'clothes';
+    }
+  }
+
+  String? _validateBeforeSubmit() {
+    final productId = _productIdController.text.trim();
+    final title = _titleController.text.trim();
+    final description = _descController.text.trim();
+    final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
+    final priceParsed = double.tryParse(_priceController.text.trim());
+
+    if (!ProductCatalog.isValidProductId(productId)) return 'product_id_invalid';
+    if (title.isEmpty || description.isEmpty || sizes.isEmpty || priceParsed == null || _imageBytes == null) {
+      return sizes.isEmpty ? 'sizes_required' : 'staff_validation_required';
+    }
+
+    if (_strictForm) {
+      if (_formSeason == null || _formAgeGroup == null || _formSex == null || _formType == null) {
+        return 'staff_validation_select_all';
+      }
+      if (_colorChoice == _FieldChoice.unset) return 'staff_validation_colors';
+      if (_stockChoice == _FieldChoice.unset) return 'staff_validation_stock';
+      if (_stockChoice == _FieldChoice.specified) {
+        final stockQtyText = _stockQtyController.text.trim();
+        if (stockQtyText.isEmpty) return 'staff_validation_stock';
+        final stockQtyParsed = int.tryParse(stockQtyText);
+        if (stockQtyParsed == null || stockQtyParsed < 0) return 'stock_qty_invalid';
+      }
+    }
+
+    final salePricing = ProductCatalog.resolveSalePricing(
+      regularPrice: priceParsed,
+      salePriceText: _salePriceController.text.trim(),
+      discountPercentText: _discountPercentController.text.trim(),
+    );
+    if (salePricing.errorKey != null) return salePricing.errorKey;
+
+    if (!_strictForm) {
+      final stockQtyText = _stockQtyController.text.trim();
+      if (stockQtyText.isNotEmpty) {
+        final stockQtyParsed = int.tryParse(stockQtyText);
+        if (stockQtyParsed == null || stockQtyParsed < 0) return 'stock_qty_invalid';
+      }
+    }
+
+    return null;
+  }
+
+  void _onColorsEncodedChanged(String value) {
+    _colorsEncoded = value;
+    if (!_strictForm) return;
+    setState(() {
+      if (ProductCatalog.isNotDetermined(value)) {
+        _colorChoice = _FieldChoice.notDetermined;
+      } else if (ProductCatalog.colorsFromField(value).isNotEmpty) {
+        _colorChoice = _FieldChoice.specified;
+      } else {
+        _colorChoice = _FieldChoice.unset;
+      }
+    });
+  }
 
   Future<void> _pickImage() async {
     try {
@@ -72,39 +150,28 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   }
 
   Future<void> _submitProduct() async {
+    final validationError = _validateBeforeSubmit();
+    if (validationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of(validationError))));
+      return;
+    }
+
     final productId = _productIdController.text.trim();
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
     final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
     final size = ProductCatalog.encodeSizes(sizes);
-    final colors = ProductCatalog.encodeColors(ProductCatalog.colorsFromField(_colorsEncoded));
-    final priceParsed = double.tryParse(_priceController.text.trim());
+    final priceParsed = double.parse(_priceController.text.trim());
 
-    final soldPriceText = _soldPriceController.text.trim();
-    final soldPriceParsed = soldPriceText.isEmpty ? null : double.tryParse(soldPriceText);
-    final stockQtyText = _stockQtyController.text.trim();
-    final stockQtyParsed = stockQtyText.isEmpty ? null : int.tryParse(stockQtyText);
-
-    if (!ProductCatalog.isValidProductId(productId)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_invalid'))));
-      return;
-    }
-    if (title.isEmpty || description.isEmpty || sizes.isEmpty || priceParsed == null || _imageBytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(sizes.isEmpty ? S.of('sizes_required') : S.of('staff_validation_required'))),
-      );
-      return;
-    }
-    if (soldPriceText.isNotEmpty && (soldPriceParsed == null || soldPriceParsed >= priceParsed)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of('sale_price_invalid'))),
-      );
-      return;
-    }
-    if (stockQtyText.isNotEmpty && (stockQtyParsed == null || stockQtyParsed < 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('stock_qty_invalid'))));
-      return;
-    }
+    final colors = _resolveColorsForSave();
+    final salePricing = ProductCatalog.resolveSalePricing(
+      regularPrice: priceParsed,
+      salePriceText: _salePriceController.text.trim(),
+      discountPercentText: _discountPercentController.text.trim(),
+    );
+    final soldPriceParsed = salePricing.soldPrice;
+    final discountPercent = salePricing.discountPercent;
+    final stockQtyParsed = _resolveStockQtyForSave();
 
     setState(() => _isUploading = true);
 
@@ -125,6 +192,10 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
       final imageUrl = await snapshot.ref.getDownloadURL();
 
       final isAdmin = widget.userRole == 'admin';
+      final season = _formSeason ?? 'summer';
+      final ageGroup = _formAgeGroup ?? 'adult';
+      final sex = _formSex ?? 'female';
+      final type = _formType ?? 'clothes';
 
       await FirebaseFirestore.instance.collection('products').doc(productId).set({
         'productId': productId,
@@ -133,12 +204,15 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         'size': size,
         if (colors.isNotEmpty) 'colors': colors,
         'price': priceParsed,
-        if (soldPriceParsed != null) 'soldPrice': soldPriceParsed,
+        if (discountPercent != null) ...{
+          'discountPercent': discountPercent,
+          'soldPrice': soldPriceParsed,
+        },
         'imageUrl': imageUrl,
-        'season': _formSeason,
-        'ageGroup': _formAgeGroup,
-        'sex': _formSex,
-        'type': _formType,
+        'season': season,
+        'ageGroup': ageGroup,
+        'sex': sex,
+        'type': type,
         'favoriteCount': 0,
         'viewCount': 0,
         if (stockQtyParsed != null) 'stockQty': stockQtyParsed,
@@ -154,10 +228,10 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
           colors: colors,
           price: priceParsed,
           soldPrice: soldPriceParsed,
-          season: _formSeason,
-          ageGroup: _formAgeGroup,
-          sex: _formSex,
-          type: _formType,
+          season: season,
+          ageGroup: ageGroup,
+          sex: sex,
+          type: type,
         ),
       });
 
@@ -172,9 +246,18 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         _sizeInputKey++;
         _colorInputKey++;
         _imageBytes = null;
+        if (_strictForm) {
+          _formSeason = null;
+          _formAgeGroup = null;
+          _formSex = null;
+          _formType = null;
+          _colorChoice = _FieldChoice.unset;
+          _stockChoice = _FieldChoice.unset;
+        }
       });
       _priceController.clear();
-      _soldPriceController.clear();
+      _discountPercentController.clear();
+      _salePriceController.clear();
       _stockQtyController.clear();
 
       if (mounted) {
@@ -192,13 +275,87 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     }
   }
 
+  String _resolveColorsForSave() {
+    if (_strictForm && _colorChoice == _FieldChoice.notDetermined) {
+      return ProductCatalog.notDetermined;
+    }
+    return ProductCatalog.encodeColors(ProductCatalog.colorsFromField(_colorsEncoded));
+  }
+
+  int? _resolveStockQtyForSave() {
+    if (_strictForm) {
+      if (_stockChoice == _FieldChoice.notDetermined) return null;
+      return int.tryParse(_stockQtyController.text.trim());
+    }
+    final stockQtyText = _stockQtyController.text.trim();
+    if (stockQtyText.isEmpty) return null;
+    return int.tryParse(stockQtyText);
+  }
+
+  Widget _stockChoiceSection() {
+    if (!_strictForm) {
+      return TextField(
+        controller: _stockQtyController,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          labelText: S.of('field_stock_qty'),
+          hintText: S.of('field_stock_qty_hint'),
+          isDense: true,
+        ),
+      );
+    }
+
+    final chipStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w700);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          S.of('field_stock_qty'),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: Text(ProductCatalog.notDeterminedLabel(), style: chipStyle),
+              selected: _stockChoice == _FieldChoice.notDetermined,
+              onSelected: (_) => setState(() {
+                _stockChoice = _FieldChoice.notDetermined;
+                _stockQtyController.clear();
+              }),
+            ),
+            ChoiceChip(
+              label: Text(S.of('field_stock_set_qty'), style: chipStyle),
+              selected: _stockChoice == _FieldChoice.specified,
+              onSelected: (_) => setState(() => _stockChoice = _FieldChoice.specified),
+            ),
+          ],
+        ),
+        if (_stockChoice == _FieldChoice.specified) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: _stockQtyController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: S.of('field_stock_qty_hint'),
+              isDense: true,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   void dispose() {
     _productIdController.dispose();
     _titleController.dispose();
     _descController.dispose();
     _priceController.dispose();
-    _soldPriceController.dispose();
+    _discountPercentController.dispose();
+    _salePriceController.dispose();
     _stockQtyController.dispose();
     super.dispose();
   }
@@ -324,16 +481,14 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
                       controller: _priceController,
                       decoration: InputDecoration(labelText: S.of('field_price'), isDense: true),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: _soldPriceController,
-                      decoration: InputDecoration(
-                        labelText: S.of('field_sale_price'),
-                        isDense: true,
-                        hintText: S.of('field_sale_price_hint'),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    SalePricingFields(
+                      dense: true,
+                      regularPriceController: _priceController,
+                      salePriceController: _salePriceController,
+                      discountPercentController: _discountPercentController,
                     ),
                   ],
                 ),
@@ -341,15 +496,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
             ],
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _stockQtyController,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: S.of('field_stock_qty'),
-              hintText: S.of('field_stock_qty_hint'),
-              isDense: true,
-            ),
-          ),
+          _stockChoiceSection(),
           const SizedBox(height: 16),
           SizeInputField(
             key: ValueKey('size_$_sizeInputKey'),
@@ -360,11 +507,16 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
           ColorInputField(
             key: ValueKey('color_$_colorInputKey'),
             dense: true,
-            onEncodedChanged: (value) => _colorsEncoded = value,
+            allowNotDetermined: _strictForm,
+            notDeterminedSelected: _colorChoice == _FieldChoice.notDetermined,
+            onEncodedChanged: _onColorsEncodedChanged,
+            onNotDeterminedSelected: () => setState(() => _colorChoice = _FieldChoice.notDetermined),
+            onColorsSpecified: () => setState(() => _colorChoice = _FieldChoice.specified),
           ),
           const SizedBox(height: 16),
           AudienceFields(
             dense: true,
+            requireExplicitChoice: _strictForm,
             ageGroup: _formAgeGroup,
             sex: _formSex,
             onAgeGroupChanged: (v) => setState(() => _formAgeGroup = v),
@@ -374,24 +526,26 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
           Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<String>(
+                child: StaffChoiceDropdown(
+                  dense: true,
+                  label: S.of('field_season'),
                   value: _formSeason,
-                  items: ProductCatalog.seasons
-                      .map((s) => DropdownMenuItem(value: s, child: Text(ProductCatalog.label(s), style: const TextStyle(fontSize: 12))))
-                      .toList(),
-                  onChanged: (v) => setState(() => _formSeason = v!),
-                  decoration: InputDecoration(labelText: S.of('field_season'), isDense: true),
+                  options: ProductCatalog.seasons,
+                  optionLabel: ProductCatalog.label,
+                  requireExplicitChoice: _strictForm,
+                  onChanged: (v) => setState(() => _formSeason = v),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: DropdownButtonFormField<String>(
+                child: StaffChoiceDropdown(
+                  dense: true,
+                  label: S.of('field_category'),
                   value: _formType,
-                  items: ProductCatalog.types
-                      .map((t) => DropdownMenuItem(value: t, child: Text(ProductCatalog.label(t), style: const TextStyle(fontSize: 12))))
-                      .toList(),
-                  onChanged: (v) => setState(() => _formType = v!),
-                  decoration: InputDecoration(labelText: S.of('field_category'), isDense: true),
+                  options: ProductCatalog.types,
+                  optionLabel: ProductCatalog.label,
+                  requireExplicitChoice: _strictForm,
+                  onChanged: (v) => setState(() => _formType = v),
                 ),
               ),
             ],

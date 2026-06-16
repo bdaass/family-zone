@@ -22,6 +22,9 @@ class ProductCardItem extends StatefulWidget {
   final bool showProductId;
   final bool isHidden;
   final bool isPendingApproval;
+  final bool isNew;
+  final bool isOld;
+  final bool showOldBadge;
   final bool showStaffActions;
   final bool canDelete;
   final bool canEdit;
@@ -49,6 +52,9 @@ class ProductCardItem extends StatefulWidget {
     this.showProductId = false,
     this.isHidden = false,
     this.isPendingApproval = false,
+    this.isNew = false,
+    this.isOld = false,
+    this.showOldBadge = false,
     this.showStaffActions = false,
     this.canDelete = false,
     this.canEdit = false,
@@ -111,11 +117,7 @@ class _ProductCardItemState extends State<ProductCardItem> {
                           Positioned.fill(
                             child: Container(color: AppColors.ink.withValues(alpha: 0.35)),
                           ),
-                        if (_onSale) _badge(S.of('badge_sale'), AppColors.coral, top: 12, left: 12),
-                        if (widget.isPendingApproval)
-                          _badge(S.of('badge_pending'), AppColors.gold, top: _onSale ? 40 : 12, left: 12),
-                        if (widget.isHidden && widget.showStaffActions)
-                          _badge(S.of('badge_hidden'), AppColors.ink, top: _onSale ? 40 : 12, left: 12),
+                        ..._buildLeftBadges(),
                         if (!widget.showStaffActions)
                           Positioned(top: 12, right: 12, child: _WishlistButton(
                             active: widget.isFavorited,
@@ -213,6 +215,23 @@ class _ProductCardItemState extends State<ProductCardItem> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildLeftBadges() {
+    final badges = <({String label, Color color})>[];
+    if (widget.isNew) badges.add((label: S.of('badge_new'), color: AppColors.violet));
+    if (_onSale) badges.add((label: S.of('badge_sale'), color: AppColors.coral));
+    if (widget.showOldBadge && widget.isOld) {
+      badges.add((label: S.of('badge_old_6'), color: AppColors.inkMuted));
+    }
+    if (widget.isPendingApproval) badges.add((label: S.of('badge_pending'), color: AppColors.gold));
+    if (widget.isHidden && widget.showStaffActions) {
+      badges.add((label: S.of('badge_hidden'), color: AppColors.ink));
+    }
+    return [
+      for (var i = 0; i < badges.length; i++)
+        _badge(badges[i].label, badges[i].color, top: 12 + i * 28.0, left: 12),
+    ];
   }
 
   Widget _badge(String label, Color color, {required double top, required double left}) {

@@ -91,8 +91,17 @@ class ProductCatalogService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final batch = await _fetchBatch(startAfter: null);
+      var batch = await _fetchBatch(startAfter: null);
       if (generation != _fetchGeneration) return;
+
+      final direct = await _fetchDirectIdMatch(query);
+      if (direct != null && _passesClientFilters(query, direct)) {
+        final existing = batch.map((d) => d.id).toSet();
+        if (!existing.contains(direct.id)) {
+          batch = [direct, ...batch];
+        }
+      }
+
       _docs = batch;
       _hasMore = _lastDoc != null;
       _loadingInitial = false;
@@ -223,22 +232,26 @@ class ProductCatalogService extends ChangeNotifier {
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection('products');
 
     final search = q.searchQuery.trim().toLowerCase();
-    final tokens = search.split(RegExp(r'\s+')).where((t) => t.length >= 2).toList();
-    final usePrefixSearch = search.isNotEmpty && tokens.length == 1;
-    final useTokenSearch = search.isNotEmpty && tokens.length > 1;
+    final terms = search.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    final useIdSearch = terms.length == 1 && ProductCatalog.isIdSearchTerm(terms.first);
+    final usePrefixSearch = terms.length == 1 && !useIdSearch && terms.first.length >= 2;
+    final useTokenSearch = terms.length > 1;
 
     if (!q.staffMode) {
       query = query.where('visibility', isEqualTo: true);
     }
 
-    if (usePrefixSearch) {
-      final prefix = tokens.first;
+    if (useIdSearch) {
+      final prefix = terms.first;
+      query = query.orderBy('searchIdPrefix').startAt([prefix]).endAt(['$prefix\uf8ff']);
+    } else if (usePrefixSearch) {
+      final prefix = terms.first;
       query = query
           .orderBy('searchPrefix')
           .startAt([prefix])
           .endAt(['$prefix\uf8ff']);
     } else if (useTokenSearch) {
-      final token = tokens.reduce((a, b) => a.length >= b.length ? a : b);
+      final token = terms.reduce((a, b) => a.length >= b.length ? a : b);
       query = query.where('searchTokens', arrayContains: token).orderBy('created_at', descending: true);
     } else {
       final seasons = ProductCatalog.seasonsForFilter(q.seasonFilter);
@@ -282,5 +295,28 @@ class ProductCatalogService extends ChangeNotifier {
     }
 
     return true;
+  }
+
+  /// Exact product ID lookup (case-insensitive) for items missing [searchIdPrefix].
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _fetchDirectIdMatch(CatalogQuery q) async {
+    final term = q.searchQuery.trim();
+    if (term.isEmpty || !ProductCatalog.isIdSearchTerm(term)) return null;
+
+    final col = FirebaseFirestore.instance.collection('products');
+    final candidates = <String>{term, term.toUpperCase(), term.toLowerCase()};
+
+    for (final id in candidates) {
+      final snap = await col.doc(id).get();
+      if (snap.exists && snap.data() != null) {
+        return snap as QueryDocumentSnapshot<Map<String, dynamic>>;
+      }
+    }
+
+    for (final id in candidates) {
+      final qs = await col.where('productId', isEqualTo: id).limit(1).get();
+      if (qs.docs.isNotEmpty) return qs.docs.first;
+    }
+
+    return null;
   }
 }

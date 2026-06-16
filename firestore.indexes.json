@@ -13,7 +13,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "visibility", "order": "ASCENDING" },
-        { "fieldPath": "searchPrefix", "order": "ASCENDING" }
+        { "fieldPath": "searchIdPrefix", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "searchIdPrefix", "order": "ASCENDING" }
       ]
     },
     {

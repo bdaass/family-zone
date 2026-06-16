@@ -46,7 +46,6 @@ class CatalogFilterBar extends StatelessWidget {
     this.compact = false,
   });
 
-  static const _seasons = ['All Seasons', 'Summer', 'Winter', 'Sport'];
   static const _categories = ['All Categories', 'Clothes', 'Shoes', 'Lingery', 'Sac', 'Scarf'];
 
   bool get _hasActive =>
@@ -73,7 +72,7 @@ class CatalogFilterBar extends StatelessWidget {
           ageGroupFilter: currentAgeGroup,
         ),
         SizedBox(height: gap),
-        _row(S.of('filter_season'), _seasons, currentSeason, onSeasonChanged),
+        _row(S.of('filter_season'), ProductCatalog.filterSeasons, currentSeason, onSeasonChanged),
         SizedBox(height: gap),
         _row(S.of('filter_type'), _categories, currentCategory, onCategoryChanged),
         SizedBox(height: gap),
