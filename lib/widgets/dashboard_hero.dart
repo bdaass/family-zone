@@ -237,12 +237,17 @@ class _DashboardHeroState extends State<DashboardHero> {
           child: _whatsappButton(compact: !widget.isWide),
         ),
         if (_slides.isNotEmpty)
-          Positioned(
-            left: 0,
-            right: 0,
-            top: widget.isWide ? 52 : 46,
-            child: Center(
-              child: _categoryChip(_slides[_page.clamp(0, _slides.length - 1)]),
+          PositionedDirectional(
+            start: 14,
+            bottom: 26,
+            end: 14,
+            child: Align(
+              alignment: AlignmentDirectional.bottomStart,
+              child: _HeroCategoryBadge(
+                key: ValueKey(_slides[_page.clamp(0, _slides.length - 1)].category),
+                category: _slides[_page.clamp(0, _slides.length - 1)].category,
+                compact: !widget.isWide,
+              ),
             ),
           ),
         if (_slides.length > 1)
@@ -322,45 +327,6 @@ class _DashboardHeroState extends State<DashboardHero> {
     );
   }
 
-  Widget _categoryChip(TopSliderSlide slide) {
-    final label = _slideLabel(slide.category);
-    if (label.isEmpty) return const SizedBox.shrink();
-
-    return IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.ink.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.white.withValues(alpha: 0.2)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Text(
-            label,
-            style: const TextStyle(color: AppColors.white, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.4),
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _slideLabel(TopSliderCategory category) {
-    switch (category) {
-      case TopSliderCategory.male:
-        return S.of('hero_slide_male');
-      case TopSliderCategory.female:
-        return S.of('hero_slide_female');
-      case TopSliderCategory.boy:
-        return S.of('hero_slide_boy');
-      case TopSliderCategory.girl:
-        return S.of('hero_slide_girl');
-      case TopSliderCategory.sale:
-        return S.of('hero_slide_sale');
-      case TopSliderCategory.unknown:
-        return '';
-    }
-  }
-
   Widget _whatsappButton({required bool compact}) {
     return Material(
       color: Colors.transparent,
@@ -384,6 +350,160 @@ class _DashboardHeroState extends State<DashboardHero> {
                     Text(S.of('hero_contact_us'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Colors.white)),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroCategoryBadge extends StatefulWidget {
+  final TopSliderCategory category;
+  final bool compact;
+
+  const _HeroCategoryBadge({super.key, required this.category, required this.compact});
+
+  @override
+  State<_HeroCategoryBadge> createState() => _HeroCategoryBadgeState();
+}
+
+class _HeroCategoryBadgeState extends State<_HeroCategoryBadge> with SingleTickerProviderStateMixin {
+  late AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+    _pulse.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeroCategoryBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.category != widget.category) {
+      _pulse.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  ({String label, IconData icon, Gradient gradient}) _style(TopSliderCategory category) {
+    switch (category) {
+      case TopSliderCategory.male:
+        return (
+          label: S.of('hero_slide_male'),
+          icon: Icons.man_rounded,
+          gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
+        );
+      case TopSliderCategory.female:
+        return (
+          label: S.of('hero_slide_female'),
+          icon: Icons.woman_rounded,
+          gradient: AppColors.primaryGradient,
+        );
+      case TopSliderCategory.boy:
+        return (
+          label: S.of('hero_slide_boy'),
+          icon: Icons.boy_rounded,
+          gradient: const LinearGradient(colors: [Color(0xFF0D9488), Color(0xFF0F766E)]),
+        );
+      case TopSliderCategory.girl:
+        return (
+          label: S.of('hero_slide_girl'),
+          icon: Icons.girl_rounded,
+          gradient: const LinearGradient(colors: [Color(0xFFDB2777), Color(0xFF7C3AED)]),
+        );
+      case TopSliderCategory.sale:
+        return (
+          label: S.of('hero_slide_sale'),
+          icon: Icons.local_offer_rounded,
+          gradient: AppColors.goldGradient,
+        );
+      case TopSliderCategory.unknown:
+        return (
+          label: '',
+          icon: Icons.category_rounded,
+          gradient: const LinearGradient(colors: [AppColors.ink, AppColors.ink]),
+        );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _style(widget.category);
+    if (style.label.isEmpty) return const SizedBox.shrink();
+
+    final scale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.82, end: 1.06), weight: 55),
+      TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.0), weight: 45),
+    ]).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeOutCubic));
+
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, child) => Transform.scale(scale: scale.value, child: child),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 420),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0, 0.25), end: Offset.zero).animate(animation),
+                child: child,
+              ),
+            );
+          },
+          child: Container(
+            key: ValueKey(widget.category),
+            padding: EdgeInsets.symmetric(
+              horizontal: widget.compact ? 12 : 16,
+              vertical: widget.compact ? 8 : 10,
+            ),
+            decoration: BoxDecoration(
+              gradient: style.gradient,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.white.withValues(alpha: 0.35), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.ink.withValues(alpha: 0.28),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+                ...AppColors.glowShadow(AppColors.coral, blur: 24),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withValues(alpha: 0.22),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Icon(style.icon, color: AppColors.white, size: widget.compact ? 18 : 22),
+                  ),
+                ),
+                SizedBox(width: widget.compact ? 8 : 10),
+                Text(
+                  style.label.toUpperCase(),
+                  style: TextStyle(
+                    color: AppColors.white,
+                    fontSize: widget.compact ? 13 : 15,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.1,
+                    shadows: const [Shadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 2))],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

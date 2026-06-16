@@ -37,6 +37,7 @@ import '../widgets/catalog_sort_bar.dart';
 import '../widgets/approval_queue_sheet.dart';
 import '../widgets/staff_analytics_sheet.dart';
 import 'auth_modal.dart';
+import '../widgets/staff_control_panel.dart';
 import 'staff_panel.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -63,6 +64,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Timer? _searchDebounce;
   bool _authResolved = false;
   int _heroRefreshToken = 0;
+  bool _staffAddPanelOpen = false;
 
   final GlobalKey _staffPanelKey = GlobalKey();
   final GlobalKey _collectionKey = GlobalKey();
@@ -640,10 +642,32 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       controller: _scrollController,
                       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                       slivers: [
-                        if (userRole == 'admin' || userRole == 'employee')
+                        if (_isStaff)
                           SliverToBoxAdapter(
-                            key: _staffPanelKey,
-                            child: StaffManagementPanel(userRole: userRole),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                StaffControlPanel(
+                                  userRole: userRole,
+                                  addPanelOpen: _staffAddPanelOpen,
+                                  onToggleAddPanel: () => setState(() => _staffAddPanelOpen = !_staffAddPanelOpen),
+                                  onApprovalQueue: _showApprovalQueue,
+                                  onAnalytics: _showStaffAnalytics,
+                                ),
+                                AnimatedCrossFade(
+                                  firstChild: const SizedBox(width: double.infinity, height: 0),
+                                  secondChild: StaffManagementPanel(
+                                    key: _staffPanelKey,
+                                    userRole: userRole,
+                                  ),
+                                  crossFadeState: _staffAddPanelOpen
+                                      ? CrossFadeState.showSecond
+                                      : CrossFadeState.showFirst,
+                                  duration: const Duration(milliseconds: 280),
+                                  sizeCurve: Curves.easeOutCubic,
+                                ),
+                              ],
+                            ),
                           ),
                         SliverToBoxAdapter(
                           child: DashboardHero(
@@ -750,14 +774,20 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   void _scrollToStaffPanel() {
-    final context = _staffPanelKey.currentContext;
-    if (context != null) {
-      Scrollable.ensureVisible(
-        context,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOutCubic,
-      );
+    if (!_staffAddPanelOpen) {
+      setState(() => _staffAddPanelOpen = true);
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final context = _staffPanelKey.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, User? user, bool showDrawer) {
