@@ -15,6 +15,12 @@ void main() {
       expect(ProductPermissions.canDelete('employee'), isFalse);
     });
 
+    test('requiresEditApproval is employee-only', () {
+      expect(ProductPermissions.requiresEditApproval('admin'), isFalse);
+      expect(ProductPermissions.requiresEditApproval('employee'), isTrue);
+      expect(ProductPermissions.requiresEditApproval('client'), isFalse);
+    });
+
     test('isPublicCatalogItem requires visible and approved', () {
       expect(
         ProductPermissions.isPublicCatalogItem({'visibility': true, 'approved': true}),

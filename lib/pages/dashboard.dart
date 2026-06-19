@@ -399,7 +399,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           hasBarcode: ProductCatalog.hasBarcodeImage(data),
           barcodeImageUrl: userRole == 'admin' ? ProductCatalog.barcodeImageUrlFrom(data) : null,
           showBarcodePreview: userRole == 'admin',
-          showApprovalNotice: _isStaff && isPublished,
+          showApprovalNotice: ProductPermissions.requiresEditApproval(userRole) && isPublished,
         );
       },
     );
@@ -413,7 +413,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
       final newProductId = result.remove('productId') as String?;
       final imageUpdate = result.remove('_imageUpdate') as ProductImageUpdate?;
-      final deferImageDeletes = _isStaff && isPublished;
+      final deferImageDeletes = ProductPermissions.requiresEditApproval(userRole) && isPublished;
 
       if (imageUpdate != null) {
         final applied = await ProductImageService.applyImageUpdate(
@@ -431,7 +431,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         }
       }
 
-      if (_isStaff && isPublished) {
+      if (ProductPermissions.requiresEditApproval(userRole) && isPublished) {
         if (newProductId != null && newProductId != docId) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -455,7 +455,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         return;
       }
 
-      if (_isStaff) {
+      if (ProductPermissions.requiresEditApproval(userRole)) {
         result['needsApproval'] = true;
         result['editPending'] = false;
         result['pendingEdit'] = FieldValue.delete();
@@ -468,7 +468,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       );
       _invalidateCatalog();
       if (mounted) {
-        final message = _isStaff && !isPublished
+        final message = ProductPermissions.requiresEditApproval(userRole) && !isPublished
             ? S.of('edit_submitted_for_approval')
             : S.of('item_updated');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));

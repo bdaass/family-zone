@@ -11,6 +11,9 @@ class ProductPermissions {
 
   static bool canApproveProducts(String role) => role == 'admin';
 
+  /// Employee add/edit changes need admin approval; admins publish immediately.
+  static bool requiresEditApproval(String role) => isStaff(role) && !canApproveProducts(role);
+
   static bool isApproved(Map<String, dynamic> data) => data['approved'] != false;
 
   static bool isVisible(Map<String, dynamic> data) => data['visibility'] == true;
