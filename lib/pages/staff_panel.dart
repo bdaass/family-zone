@@ -16,6 +16,7 @@ import '../widgets/branch_stock_field.dart';
 import '../widgets/product_images_field.dart';
 import '../widgets/sale_pricing_fields.dart';
 import '../widgets/size_input_field.dart';
+import '../widgets/staff_form_section.dart';
 import '../widgets/staff_choice_dropdown.dart';
 
 enum _FieldChoice { unset, notDetermined, specified }
@@ -332,111 +333,140 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
               ),
             ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _productIdController,
-            decoration: InputDecoration(
-              labelText: S.of('field_product_id'),
-              hintText: S.of('field_product_id_hint'),
-              isDense: true,
-            ),
-            textCapitalization: TextCapitalization.characters,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _titleController,
-            decoration: InputDecoration(labelText: S.of('field_title'), isDense: true),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _descController,
-            decoration: InputDecoration(labelText: S.of('field_description'), isDense: true),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _priceController,
-            decoration: InputDecoration(labelText: S.of('field_price'), isDense: true),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 8),
-          SalePricingFields(
+          StaffFormSection(
+            title: S.of('staff_section_basics'),
+            icon: Icons.edit_note_rounded,
+            accent: AppColors.ink,
             dense: true,
-            regularPriceController: _priceController,
-            salePriceController: _salePriceController,
-            discountPercentController: _discountPercentController,
-          ),
-          const SizedBox(height: 16),
-          ProductImagesField(
-            key: ValueKey('photos_$_productImagesKey'),
-            dense: true,
-            onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
-            onNewImagesChanged: (images) => _newProductImages = images,
-            onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
-            onRemovedUrlsChanged: (_) {},
-          ),
-          const SizedBox(height: 12),
-          BranchStockField(
-            key: ValueKey('branch_stock_$_branchStockKey'),
-            dense: true,
-            requireExplicitChoice: _strictForm,
-            onChanged: (values) => _branchStock = values,
-            onAcknowledgedBranchesChanged: (ack) => setState(() => _branchStockAcknowledged = ack),
-          ),
-          const SizedBox(height: 16),
-          SizeInputField(
-            key: ValueKey('size_$_sizeInputKey'),
-            dense: true,
-            onEncodedChanged: (value) => _sizesEncoded = value,
-          ),
-          const SizedBox(height: 16),
-          ColorInputField(
-            key: ValueKey('color_$_colorInputKey'),
-            dense: true,
-            allowNotDetermined: _strictForm,
-            notDeterminedSelected: _colorChoice == _FieldChoice.notDetermined,
-            onEncodedChanged: _onColorsEncodedChanged,
-            onNotDeterminedSelected: () => setState(() => _colorChoice = _FieldChoice.notDetermined),
-            onColorsSpecified: () => setState(() => _colorChoice = _FieldChoice.specified),
-          ),
-          const SizedBox(height: 16),
-          AudienceFields(
-            dense: true,
-            requireExplicitChoice: _strictForm,
-            ageGroup: _formAgeGroup,
-            sex: _formSex,
-            onAgeGroupChanged: (v) => setState(() => _formAgeGroup = v),
-            onSexChanged: (v) => setState(() => _formSex = v),
-          ),
-          const SizedBox(height: 12),
-          Row(
             children: [
-              Expanded(
-                child: StaffChoiceDropdown(
-                  dense: true,
-                  label: S.of('field_season'),
-                  value: _formSeason,
-                  options: ProductCatalog.seasons,
-                  optionLabel: ProductCatalog.label,
-                  requireExplicitChoice: _strictForm,
-                  onChanged: (v) => setState(() => _formSeason = v),
+              TextField(
+                controller: _productIdController,
+                decoration: InputDecoration(
+                  labelText: S.of('field_product_id'),
+                  hintText: S.of('field_product_id_hint'),
+                  isDense: true,
                 ),
+                textCapitalization: TextCapitalization.characters,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: StaffChoiceDropdown(
-                  dense: true,
-                  label: S.of('field_category'),
-                  value: _formType,
-                  options: ProductCatalog.types,
-                  optionLabel: ProductCatalog.label,
-                  requireExplicitChoice: _strictForm,
-                  onChanged: (v) => setState(() => _formType = v),
-                ),
+              TextField(
+                controller: _titleController,
+                decoration: InputDecoration(labelText: S.of('field_title'), isDense: true),
+              ),
+              TextField(
+                controller: _descController,
+                decoration: InputDecoration(labelText: S.of('field_description'), isDense: true),
+                maxLines: 2,
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          StaffFormSection(
+            title: S.of('staff_section_media'),
+            icon: Icons.photo_library_outlined,
+            accent: AppColors.violet,
+            dense: true,
+            children: [
+              ProductImagesField(
+                key: ValueKey('photos_$_productImagesKey'),
+                dense: true,
+                onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
+                onNewImagesChanged: (images) => _newProductImages = images,
+                onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
+                onRemovedUrlsChanged: (_) {},
+              ),
+            ],
+          ),
+          StaffFormSection(
+            title: S.of('staff_section_variants'),
+            icon: Icons.straighten_rounded,
+            accent: AppColors.coral,
+            dense: true,
+            children: [
+              SizeInputField(
+                key: ValueKey('size_$_sizeInputKey'),
+                dense: true,
+                onEncodedChanged: (value) => _sizesEncoded = value,
+              ),
+              ColorInputField(
+                key: ValueKey('color_$_colorInputKey'),
+                dense: true,
+                allowNotDetermined: _strictForm,
+                notDeterminedSelected: _colorChoice == _FieldChoice.notDetermined,
+                onEncodedChanged: _onColorsEncodedChanged,
+                onNotDeterminedSelected: () => setState(() => _colorChoice = _FieldChoice.notDetermined),
+                onColorsSpecified: () => setState(() => _colorChoice = _FieldChoice.specified),
+              ),
+            ],
+          ),
+          StaffFormSection(
+            title: S.of('staff_section_inventory'),
+            icon: Icons.storefront_outlined,
+            accent: AppColors.gold,
+            dense: true,
+            children: [
+              BranchStockField(
+                key: ValueKey('branch_stock_$_branchStockKey'),
+                dense: true,
+                requireExplicitChoice: _strictForm,
+                onChanged: (values) => _branchStock = values,
+                onAcknowledgedBranchesChanged: (ack) => setState(() => _branchStockAcknowledged = ack),
+              ),
+            ],
+          ),
+          StaffFormSection(
+            title: S.of('staff_section_pricing'),
+            icon: Icons.sell_outlined,
+            accent: AppColors.coral,
+            dense: true,
+            children: [
+              TextField(
+                controller: _priceController,
+                decoration: InputDecoration(labelText: S.of('field_price'), isDense: true),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
+              ),
+              SalePricingFields(
+                dense: true,
+                regularPriceController: _priceController,
+                salePriceController: _salePriceController,
+                discountPercentController: _discountPercentController,
+              ),
+            ],
+          ),
+          StaffFormSection(
+            title: S.of('staff_section_catalog'),
+            icon: Icons.category_outlined,
+            accent: AppColors.violet,
+            dense: true,
+            children: [
+              AudienceFields(
+                dense: true,
+                requireExplicitChoice: _strictForm,
+                ageGroup: _formAgeGroup,
+                sex: _formSex,
+                onAgeGroupChanged: (v) => setState(() => _formAgeGroup = v),
+                onSexChanged: (v) => setState(() => _formSex = v),
+              ),
+              StaffChoiceDropdown(
+                dense: true,
+                label: S.of('field_season'),
+                value: _formSeason,
+                options: ProductCatalog.seasons,
+                optionLabel: ProductCatalog.label,
+                requireExplicitChoice: _strictForm,
+                onChanged: (v) => setState(() => _formSeason = v),
+              ),
+              StaffChoiceDropdown(
+                dense: true,
+                label: S.of('field_category'),
+                value: _formType,
+                options: ProductCatalog.types,
+                optionLabel: ProductCatalog.label,
+                requireExplicitChoice: _strictForm,
+                onChanged: (v) => setState(() => _formType = v),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           _isUploading
               ? const Center(child: CircularProgressIndicator(color: AppColors.coral))
               : SizedBox(

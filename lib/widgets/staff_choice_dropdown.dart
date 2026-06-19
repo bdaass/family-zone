@@ -42,13 +42,19 @@ class StaffChoiceDropdown extends StatelessWidget {
       ...options.map(
         (option) => DropdownMenuItem(
           value: option,
-          child: Text(optionLabel(option), style: textStyle),
+          child: Text(
+            optionLabel(option),
+            style: textStyle,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
         ),
       ),
     ];
 
     return DropdownButtonFormField<String>(
       key: ValueKey('$label-$value'),
+      isExpanded: true,
       initialValue: _isValidValue(value) ? value : null,
       decoration: InputDecoration(
         labelText: label,

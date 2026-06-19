@@ -12,6 +12,8 @@ import 'color_input_field.dart';
 import 'product_images_field.dart';
 import 'size_input_field.dart';
 import 'sale_pricing_fields.dart';
+import 'staff_choice_dropdown.dart';
+import 'staff_form_section.dart';
 
 class EditProductSheet extends StatefulWidget {
   final String productId;
@@ -250,81 +252,119 @@ class _EditProductSheetState extends State<EditProductSheet> {
               ),
             ],
             const SizedBox(height: 20),
-            TextField(
-              controller: _productIdController,
-              decoration: InputDecoration(
-                labelText: S.of('field_product_id'),
-                hintText: S.of('field_product_id_hint'),
-              ),
-              textCapitalization: TextCapitalization.characters,
+            StaffFormSection(
+              title: S.of('staff_section_basics'),
+              icon: Icons.edit_note_rounded,
+              accent: AppColors.ink,
+              children: [
+                TextField(
+                  controller: _productIdController,
+                  decoration: InputDecoration(
+                    labelText: S.of('field_product_id'),
+                    hintText: S.of('field_product_id_hint'),
+                  ),
+                  textCapitalization: TextCapitalization.characters,
+                ),
+                TextField(
+                  controller: _titleController,
+                  decoration: InputDecoration(labelText: S.of('field_title')),
+                ),
+                TextField(
+                  controller: _descController,
+                  decoration: InputDecoration(labelText: S.of('field_description')),
+                  maxLines: 3,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            ProductImagesField(
-              initialImageUrls: widget.imageUrls,
-              hasExistingBarcode: widget.hasBarcode,
-              existingBarcodeUrl: widget.barcodeImageUrl,
-              showBarcodePreview: widget.showBarcodePreview,
-              onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
-              onNewImagesChanged: (images) => _newProductImages = images,
-              onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
-              onRemovedUrlsChanged: (urls) => _removedImageUrls = urls,
+            StaffFormSection(
+              title: S.of('staff_section_media'),
+              icon: Icons.photo_library_outlined,
+              accent: AppColors.violet,
+              children: [
+                ProductImagesField(
+                  initialImageUrls: widget.imageUrls,
+                  hasExistingBarcode: widget.hasBarcode,
+                  existingBarcodeUrl: widget.barcodeImageUrl,
+                  showBarcodePreview: widget.showBarcodePreview,
+                  onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
+                  onNewImagesChanged: (images) => _newProductImages = images,
+                  onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
+                  onRemovedUrlsChanged: (urls) => _removedImageUrls = urls,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(controller: _titleController, decoration: InputDecoration(labelText: S.of('field_title'))),
-            const SizedBox(height: 12),
-            TextField(controller: _descController, decoration: InputDecoration(labelText: S.of('field_description')), maxLines: 3),
-            const SizedBox(height: 12),
-            SizeInputField(
-              initialValue: _sizesEncoded,
-              onEncodedChanged: (value) => _sizesEncoded = value,
+            StaffFormSection(
+              title: S.of('staff_section_variants'),
+              icon: Icons.straighten_rounded,
+              accent: AppColors.coral,
+              children: [
+                SizeInputField(
+                  initialValue: _sizesEncoded,
+                  onEncodedChanged: (value) => _sizesEncoded = value,
+                ),
+                ColorInputField(
+                  initialValue: _colorsEncoded,
+                  onEncodedChanged: (value) => _colorsEncoded = value,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            ColorInputField(
-              initialValue: _colorsEncoded,
-              onEncodedChanged: (value) => _colorsEncoded = value,
+            StaffFormSection(
+              title: S.of('staff_section_inventory'),
+              icon: Icons.storefront_outlined,
+              accent: AppColors.gold,
+              children: [
+                BranchStockField(
+                  initialValues: widget.branchStock,
+                  onChanged: (values) => _branchStock = values,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            BranchStockField(
-              initialValues: widget.branchStock,
-              onChanged: (values) => _branchStock = values,
+            StaffFormSection(
+              title: S.of('staff_section_pricing'),
+              icon: Icons.sell_outlined,
+              accent: AppColors.coral,
+              children: [
+                TextField(
+                  controller: _priceController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: S.of('field_regular_price')),
+                  onChanged: (_) => setState(() {}),
+                ),
+                SalePricingFields(
+                  regularPriceController: _priceController,
+                  salePriceController: _salePriceController,
+                  discountPercentController: _discountPercentController,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _priceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: S.of('field_regular_price')),
-              onChanged: (_) => setState(() {}),
+            StaffFormSection(
+              title: S.of('staff_section_catalog'),
+              icon: Icons.category_outlined,
+              accent: AppColors.violet,
+              children: [
+                AudienceFields(
+                  ageGroup: _ageGroup,
+                  sex: _sex,
+                  onAgeGroupChanged: (v) => setState(() => _ageGroup = v ?? _ageGroup),
+                  onSexChanged: (v) => setState(() => _sex = v ?? _sex),
+                ),
+                StaffChoiceDropdown(
+                  label: S.of('field_season'),
+                  value: _season,
+                  options: ProductCatalog.seasons,
+                  optionLabel: ProductCatalog.label,
+                  onChanged: (v) => setState(() => _season = v ?? _season),
+                ),
+                StaffChoiceDropdown(
+                  label: S.of('field_category'),
+                  value: _type,
+                  options: ProductCatalog.types,
+                  optionLabel: ProductCatalog.label,
+                  onChanged: (v) => setState(() => _type = v ?? _type),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            SalePricingFields(
-              regularPriceController: _priceController,
-              salePriceController: _salePriceController,
-              discountPercentController: _discountPercentController,
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: ValueKey(_season),
-              initialValue: _season,
-              decoration: InputDecoration(labelText: S.of('field_season')),
-              items: ProductCatalog.seasons.map((s) => DropdownMenuItem(value: s, child: Text(ProductCatalog.label(s)))).toList(),
-              onChanged: (v) => setState(() => _season = v!),
-            ),
-            const SizedBox(height: 12),
-            AudienceFields(
-              ageGroup: _ageGroup,
-              sex: _sex,
-              onAgeGroupChanged: (v) => setState(() => _ageGroup = v ?? _ageGroup),
-              onSexChanged: (v) => setState(() => _sex = v ?? _sex),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: ValueKey(_type),
-              initialValue: _type,
-              decoration: InputDecoration(labelText: S.of('field_category')),
-              items: ProductCatalog.types.map((t) => DropdownMenuItem(value: t, child: Text(ProductCatalog.label(t)))).toList(),
-              onChanged: (v) => setState(() => _type = v!),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
             DecoratedBox(
               decoration: BoxDecoration(gradient: AppColors.primaryGradient, borderRadius: BorderRadius.circular(14)),
               child: ElevatedButton(
