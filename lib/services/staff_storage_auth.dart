@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 /// Client-side guard before Storage uploads.
 ///
 /// Storage rules authorize staff using the Firestore `users/{uid}.role` field
-/// (same as [firestore.rules]), not JWT custom claims.
+/// (same as [firestore.rules]). Refreshes the auth token after syncing claims.
 class StaffStorageAuth {
   /// Verifies the signed-in user has a staff role in Firestore.
   static Future<void> prepareForUpload() async {
@@ -21,9 +23,18 @@ class StaffStorageAuth {
     if (role != 'admin' && role != 'employee') {
       throw FirebaseAuthException(
         code: 'staff-role-required',
-        message: 'Only staff can upload. Your Firestore role is "$role" (expected admin or employee).',
+        message: 'Only staff can upload.',
       );
     }
+
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'europe-west1').httpsCallable('syncMyRoleClaims');
+      await callable.call();
+    } catch (e) {
+      debugPrint('StaffStorageAuth: claim sync skipped: $e');
+    }
+
+    await user.getIdToken(true);
   }
 
   static Future<String?> _firestoreRole(String uid) async {

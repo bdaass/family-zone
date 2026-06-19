@@ -109,7 +109,7 @@ class ProductCatalogService extends ChangeNotifier {
     } catch (e, st) {
       if (generation != _fetchGeneration) return;
       debugPrint('ProductCatalogService.fetchFirst failed: $e\n$st');
-      _error = '$e';
+      _error = 'load_failed';
       _loadingInitial = false;
       notifyListeners();
     }
@@ -135,7 +135,7 @@ class ProductCatalogService extends ChangeNotifier {
     } catch (e, st) {
       if (generation != _fetchGeneration) return;
       debugPrint('ProductCatalogService.fetchMore failed: $e\n$st');
-      _error = '$e';
+      _error = 'load_failed';
       _loadingMore = false;
       notifyListeners();
     }

@@ -456,7 +456,7 @@ class _ColorSwatches extends StatelessWidget {
           Padding(
             padding: const EdgeInsetsDirectional.only(end: 4),
             child: Tooltip(
-              message: color,
+              message: S.colorName(color),
               child: Container(
                 width: 14,
                 height: 14,

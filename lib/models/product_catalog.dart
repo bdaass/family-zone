@@ -515,9 +515,12 @@ class ProductCatalog {
     if (isNotDetermined(raw)) return notDeterminedLabel();
     final colors = colorsFromField(raw);
     if (colors.isEmpty) return '';
-    if (colors.length <= maxShown) return colors.join(' · ');
-    return '${colors.take(maxShown - 1).join(' · ')} +${colors.length - (maxShown - 1)}';
+    final labels = colors.map(colorDisplayName);
+    if (colors.length <= maxShown) return labels.join(' · ');
+    return '${labels.take(maxShown - 1).join(' · ')} +${colors.length - (maxShown - 1)}';
   }
+
+  static String colorDisplayName(String raw) => S.colorName(raw);
 
   static List<String> colorsForSelection(String? raw) => colorsFromField(raw);
 
@@ -749,6 +752,19 @@ class ProductCatalog {
     if (created == null) return false;
     final ref = now ?? DateTime.now();
     return ref.difference(created).inDays < newProductMaxAgeDays;
+  }
+
+  static bool hasPendingEdit(Map<String, dynamic> data) => data['editPending'] == true;
+
+  static bool needsApproval(Map<String, dynamic> data) {
+    if (data['needsApproval'] == true) return true;
+    return data['approved'] == false;
+  }
+
+  static Map<String, dynamic>? pendingEditFrom(Map<String, dynamic> data) {
+    final raw = data['pendingEdit'];
+    if (raw is! Map) return null;
+    return Map<String, dynamic>.from(raw);
   }
 
   /// Listed more than [oldProductMonths] months ago (admin inventory hint).

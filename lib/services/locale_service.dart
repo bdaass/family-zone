@@ -5,7 +5,7 @@ class LocaleService extends ChangeNotifier {
 
   static final LocaleService instance = LocaleService._();
 
-  Locale _locale = const Locale('en');
+  Locale _locale = const Locale('ar');
 
   Locale get locale => _locale;
 

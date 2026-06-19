@@ -32,6 +32,8 @@ class EditProductSheet extends StatefulWidget {
   final String? barcodeImageUrl;
   final bool showBarcodePreview;
 
+  final bool showApprovalNotice;
+
   const EditProductSheet({
     super.key,
     required this.productId,
@@ -51,6 +53,7 @@ class EditProductSheet extends StatefulWidget {
     this.hasBarcode = false,
     this.barcodeImageUrl,
     this.showBarcodePreview = false,
+    this.showApprovalNotice = false,
   });
 
   @override
@@ -239,6 +242,13 @@ class _EditProductSheetState extends State<EditProductSheet> {
             ),
             const SizedBox(height: 20),
             Text(S.of('edit_item_title'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.ink)),
+            if (widget.showApprovalNotice) ...[
+              const SizedBox(height: 10),
+              Text(
+                S.of('staff_edit_approval_notice'),
+                style: const TextStyle(fontSize: 12, color: AppColors.inkMuted, height: 1.35),
+              ),
+            ],
             const SizedBox(height: 20),
             TextField(
               controller: _productIdController,

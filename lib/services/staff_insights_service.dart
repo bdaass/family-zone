@@ -59,7 +59,7 @@ class StaffInsightsService {
     final results = await Future.wait([
       products.orderBy('viewCount', descending: true).limit(10).get(),
       products.orderBy('favoriteCount', descending: true).limit(10).get(),
-      products.where('approved', isEqualTo: false).count().get(),
+      _pendingApprovalQuery().count().get(),
       products.where('stockQty', isLessThanOrEqualTo: ProductCatalog.lowStockThreshold).limit(50).get(),
       products.where('sold', isEqualTo: true).limit(15).get(),
     ]);
@@ -90,9 +90,17 @@ class StaffInsightsService {
     );
   }
 
+  static Query<Map<String, dynamic>> _pendingApprovalQuery() {
+    return FirebaseFirestore.instance.collection('products').where(
+      Filter.or(
+        Filter('needsApproval', isEqualTo: true),
+        Filter('approved', isEqualTo: false),
+      ),
+    );
+  }
+
   static Stream<QuerySnapshot<Map<String, dynamic>>> pendingApprovalStream() {
-    // Single-field filter only — sort client-side to avoid a composite index.
-    return FirebaseFirestore.instance.collection('products').where('approved', isEqualTo: false).snapshots();
+    return _pendingApprovalQuery().snapshots();
   }
 
   /// Newest pending items first (used after fetching without orderBy).

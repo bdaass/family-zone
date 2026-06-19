@@ -179,7 +179,7 @@ class _FavoriteListTileState extends State<_FavoriteListTile> {
       await FavoriteService.toggle(widget.docId);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('favorite_update_failed', {'error': '$e'}))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('favorite_update_failed'))));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

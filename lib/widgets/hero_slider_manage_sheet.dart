@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -9,6 +8,7 @@ import '../services/staff_storage_auth.dart';
 import '../services/top_slider_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/hero_slider_settings.dart';
+import '../utils/user_facing_error.dart';
 import '../utils/image_compressor.dart';
 
 class HeroSliderManageSheet extends StatefulWidget {
@@ -92,7 +92,7 @@ class _HeroSliderManageSheetState extends State<HeroSliderManageSheet> {
       final rawBytes = await picked.readAsBytes();
       final bytes = await ImageCompressor.compressForHeroUpload(rawBytes, size: _size);
       if (bytes == null || bytes.isEmpty) {
-        throw StateError('Could not process this image. Try a JPG or PNG from your gallery.');
+        throw StateError('image_process_failed');
       }
       ImageCompressor.ensureHeroUploadSize(bytes);
 
@@ -112,13 +112,8 @@ class _HeroSliderManageSheetState extends State<HeroSliderManageSheet> {
     } catch (e) {
       debugPrint('Hero slide upload failed: $e');
       if (mounted) {
-        final detail = switch (e) {
-          FirebaseException(:final message) => message,
-          StateError(:final message) => message,
-          _ => '$e',
-        };
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${S.of('hero_upload_failed')} $detail')),
+          SnackBar(content: Text(UserFacingError.message(e, fallbackKey: 'hero_upload_failed'))),
         );
       }
     } finally {

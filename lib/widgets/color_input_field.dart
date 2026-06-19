@@ -33,18 +33,7 @@ class _ColorInputFieldState extends State<ColorInputField> {
   final _inputController = TextEditingController();
   late List<String> _colors;
 
-  static const _quickColors = [
-    'Black',
-    'White',
-    'Navy',
-    'Beige',
-    'Gray',
-    'Red',
-    'Pink',
-    'Blue',
-    'Green',
-    'Brown',
-  ];
+  static const _quickColors = S.quickColorNames;
 
   @override
   void initState() {
@@ -128,7 +117,7 @@ class _ColorInputFieldState extends State<ColorInputField> {
           children: _quickColors.map((color) {
             final added = _colors.any((c) => c.toLowerCase() == color.toLowerCase());
             return ActionChip(
-              label: Text(color, style: TextStyle(fontSize: widget.dense ? 10 : 11, fontWeight: FontWeight.w600)),
+              label: Text(S.colorName(color), style: TextStyle(fontSize: widget.dense ? 10 : 11, fontWeight: FontWeight.w600)),
               onPressed: added ? null : () => _addColor(color),
               backgroundColor: added ? AppColors.creamDark : AppColors.white,
               side: BorderSide(color: added ? AppColors.creamDark : AppColors.creamDark.withValues(alpha: 0.8)),
@@ -176,7 +165,7 @@ class _ColorInputFieldState extends State<ColorInputField> {
             runSpacing: 8,
             children: _colors.map((color) {
               return InputChip(
-                label: Text(color, style: const TextStyle(fontWeight: FontWeight.w700)),
+                label: Text(S.colorName(color), style: const TextStyle(fontWeight: FontWeight.w700)),
                 deleteIcon: const Icon(Icons.close_rounded, size: 16),
                 onDeleted: () => _removeColor(color),
                 backgroundColor: AppColors.cream,

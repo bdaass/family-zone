@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
+import '../services/product_catalog_service.dart';
+import '../services/product_write_service.dart';
 import '../services/staff_insights_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_permissions.dart';
@@ -35,16 +37,14 @@ class ApprovalQueueSheet extends StatelessWidget {
 
   Future<void> _approve(BuildContext context, String docId) async {
     try {
-      await FirebaseFirestore.instance.collection('products').doc(docId).update({
-        'approved': true,
-        'visibility': true,
-      });
+      await ProductWriteService.approveProduct(docId);
+      ProductCatalogService.instance.invalidate();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('approval_approved'))));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('update_failed', {'error': '$e'}))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('update_failed'))));
       }
     }
   }
@@ -100,7 +100,7 @@ class ApprovalQueueSheet extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator(color: AppColors.coral));
                 }
                 if (snap.hasError) {
-                  return Center(child: Text(S.fmt('products_load_error_detail', {'error': '${snap.error}'})));
+                  return Center(child: Text(S.of('products_load_error_detail')));
                 }
 
                 final docs = StaffInsightsService.sortByCreatedDesc(snap.data?.docs ?? []);
@@ -125,6 +125,7 @@ class ApprovalQueueSheet extends StatelessWidget {
                     final productId = ProductCatalog.productIdFrom(data, doc.id);
                     final title = ProductCatalog.titleFrom(data);
                     final price = ProductCatalog.priceFrom(data);
+                    final hasEditPending = ProductCatalog.hasPendingEdit(data);
 
                     return Container(
                       decoration: BoxDecoration(
@@ -136,7 +137,9 @@ class ApprovalQueueSheet extends StatelessWidget {
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
                         subtitle: Text(
-                          S.fmt('approval_queue_line', {'id': productId, 'price': price.toStringAsFixed(2)}),
+                          hasEditPending
+                              ? S.fmt('approval_queue_edit_line', {'id': productId})
+                              : S.fmt('approval_queue_line', {'id': productId, 'price': price.toStringAsFixed(2)}),
                           style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
                         ),
                         trailing: _canApprove

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/cart_item.dart';
+import '../models/product_catalog.dart';
 import '../services/cart_service.dart';
 import '../services/order_service.dart';
 import '../theme/app_theme.dart';
@@ -267,7 +268,7 @@ class _CartLineTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(S.fmt('cart_line_size', {'size': item.selectedSize}), style: const TextStyle(fontSize: 11, color: AppColors.inkMuted)),
                   if (item.selectedColor.isNotEmpty)
-                    Text(S.fmt('cart_line_color', {'color': item.selectedColor}), style: const TextStyle(fontSize: 11, color: AppColors.inkMuted)),
+                    Text(S.fmt('cart_line_color', {'color': ProductCatalog.colorDisplayName(item.selectedColor)}), style: const TextStyle(fontSize: 11, color: AppColors.inkMuted)),
                   const SizedBox(height: 8),
                   Row(
                     children: [

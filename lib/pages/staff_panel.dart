@@ -8,6 +8,7 @@ import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
 import '../services/product_catalog_service.dart';
 import '../services/product_image_service.dart';
+import '../services/staff_storage_auth.dart';
 import '../services/product_write_service.dart';
 import '../widgets/audience_fields.dart';
 import '../widgets/color_input_field.dart';
@@ -160,6 +161,8 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     setState(() => _isUploading = true);
 
     try {
+      await StaffStorageAuth.prepareForUpload();
+
       if (await ProductWriteService.productDocExists(productId)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_taken'))));
@@ -206,6 +209,8 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         },
         'visibility': isAdmin,
         'approved': isAdmin,
+        'needsApproval': !isAdmin,
+        'editPending': false,
         'sold': false,
         'created_at': FieldValue.serverTimestamp(),
         ...ProductCatalog.searchIndexFields(
@@ -260,7 +265,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('staff_upload_failed', {'error': '$e'}))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('staff_upload_failed'))));
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);

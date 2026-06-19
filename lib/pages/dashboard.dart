@@ -15,7 +15,9 @@ import '../services/favorite_service.dart';
 import '../services/product_catalog_service.dart';
 import '../services/catalog_migration_service.dart';
 import '../services/product_image_service.dart';
+import '../services/staff_storage_auth.dart';
 import '../theme/app_theme.dart';
+import '../utils/user_facing_error.dart';
 import '../utils/hero_slider_settings.dart';
 import '../utils/product_permissions.dart';
 import '../widgets/ambient_background.dart';
@@ -272,7 +274,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       await FavoriteService.toggle(docId);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('favorite_update_failed', {'error': '$e'}))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('favorite_update_failed'))));
       }
     }
   }
@@ -362,7 +364,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('delete_failed', {'error': '$e'}))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('delete_failed'))));
       }
     }
   }
@@ -378,6 +380,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       ),
       builder: (context) {
         final audience = ProductCatalog.audienceFrom(data);
+        final isPublished =
+            ProductPermissions.isApproved(data) && ProductPermissions.isVisible(data);
         return EditProductSheet(
           productId: ProductCatalog.productIdFrom(data, docId),
           title: ProductCatalog.titleFrom(data),
@@ -396,25 +400,66 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           hasBarcode: ProductCatalog.hasBarcodeImage(data),
           barcodeImageUrl: userRole == 'admin' ? ProductCatalog.barcodeImageUrlFrom(data) : null,
           showBarcodePreview: userRole == 'admin',
+          showApprovalNotice: _isStaff && isPublished,
         );
       },
     );
     if (result == null || !mounted) return;
 
+    final isPublished =
+        ProductPermissions.isApproved(data) && ProductPermissions.isVisible(data);
+
     try {
+      await StaffStorageAuth.prepareForUpload();
+
       final newProductId = result.remove('productId') as String?;
       final imageUpdate = result.remove('_imageUpdate') as ProductImageUpdate?;
+      final deferImageDeletes = _isStaff && isPublished;
 
       if (imageUpdate != null) {
         final applied = await ProductImageService.applyImageUpdate(
           productId: docId,
           update: imageUpdate,
+          deleteRemoved: !deferImageDeletes,
         );
         final existingBarcode = ProductCatalog.barcodeImageUrlFrom(data);
         result.addAll(ProductCatalog.imageFieldsForWrite(
           imageUrls: applied.imageUrls,
           barcodeImageUrl: applied.barcodeUrl ?? existingBarcode,
         ));
+        if (deferImageDeletes && imageUpdate.removedImageUrls.isNotEmpty) {
+          result['pendingImageRemovedUrls'] = imageUpdate.removedImageUrls;
+        }
+      }
+
+      if (_isStaff && isPublished) {
+        if (newProductId != null && newProductId != docId) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(S.of('edit_id_change_pending_blocked'))),
+            );
+          }
+          return;
+        }
+
+        await ProductWriteService.submitPendingEdit(
+          docId: docId,
+          proposed: result,
+          newProductId: newProductId,
+        );
+        _invalidateCatalog();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(S.of('edit_submitted_for_approval'))),
+          );
+        }
+        return;
+      }
+
+      if (_isStaff) {
+        result['needsApproval'] = true;
+        result['editPending'] = false;
+        result['pendingEdit'] = FieldValue.delete();
       }
 
       await ProductWriteService.updateProduct(
@@ -424,7 +469,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       );
       _invalidateCatalog();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('item_updated'))));
+        final message = _isStaff && !isPublished
+            ? S.of('edit_submitted_for_approval')
+            : S.of('item_updated');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       }
     } on ArgumentError {
       if (mounted) {
@@ -432,11 +480,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       }
     } on StateError catch (e) {
       if (!mounted) return;
-      final text = e.message == 'product_id_taken' ? S.of('product_id_taken') : S.fmt('update_failed', {'error': '$e'});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(UserFacingError.message(e, fallbackKey: 'update_failed'))),
+      );
     } catch (e) {
+      debugPrint('Product update failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('update_failed', {'error': '$e'}))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('update_failed'))));
       }
     }
   }
@@ -458,7 +508,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.fmt('update_failed', {'error': '$e'}))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('update_failed'))));
       }
     }
   }
@@ -535,7 +585,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.fmt('staff_migrate_legacy_failed', {'error': '$e'}))),
+        SnackBar(content: Text(S.of('staff_migrate_legacy_failed'))),
       );
     }
   }
@@ -698,74 +748,79 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           Row(
             children: [
               if (useInlineSidebar) _buildSidebar(user),
-              Expanded(
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: RefreshIndicator(
-                      color: AppColors.coral,
-                      onRefresh: _refreshDashboard,
-                      child: CustomScrollView(
-                      controller: _scrollController,
-                      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                      slivers: [
-                        if (_isStaff)
-                          SliverToBoxAdapter(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                StaffControlPanel(
-                                  userRole: userRole,
-                                  addPanelOpen: _staffAddPanelOpen,
-                                  onToggleAddPanel: () => setState(() => _staffAddPanelOpen = !_staffAddPanelOpen),
-                                  onApprovalQueue: _showApprovalQueue,
-                                  onAnalytics: _showStaffAnalytics,
-                                  onMigrateLegacy: userRole == 'admin' ? _migrateLegacyProducts : null,
-                                ),
-                                AnimatedCrossFade(
-                                  firstChild: const SizedBox(width: double.infinity, height: 0),
-                                  secondChild: StaffManagementPanel(
-                                    key: _staffPanelKey,
-                                    userRole: userRole,
-                                  ),
-                                  crossFadeState: _staffAddPanelOpen
-                                      ? CrossFadeState.showSecond
-                                      : CrossFadeState.showFirst,
-                                  duration: const Duration(milliseconds: 280),
-                                  sizeCurve: Curves.easeOutCubic,
-                                ),
-                              ],
-                            ),
-                          ),
-                        SliverToBoxAdapter(
-                          child: DashboardHero(
-                            key: ValueKey(LocaleService.instance.languageCode),
-                            isWide: isWide,
-                            refreshToken: _heroRefreshToken,
-                            canManageSlides: _isStaff,
-                            onContactTap: _contactViaWhatsApp,
-                            onCategoryTap: _applyHeroFilter,
-                          ),
-                        ),
-                        SliverToBoxAdapter(
-                          key: _collectionKey,
-                          child: _buildCollectionHeader(isWide, useInlineSidebar),
-                        ),
-                        _buildProductGrid(isWide),
-                        const SliverToBoxAdapter(child: SizedBox(height: 60)),
-                      ],
-                    ),
-                    ),
-                  ),
-                ),
-              ),
+              Expanded(child: _buildCatalogScrollView(isWide: isWide, useInlineSidebar: useInlineSidebar)),
             ],
           ),
         ],
       ),
     );
       },
+    );
+  }
+
+  Widget _buildCatalogScrollView({required bool isWide, required bool useInlineSidebar}) {
+    final scroll = RefreshIndicator(
+      color: AppColors.coral,
+      onRefresh: _refreshDashboard,
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        slivers: [
+          if (_isStaff)
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  StaffControlPanel(
+                    userRole: userRole,
+                    addPanelOpen: _staffAddPanelOpen,
+                    onToggleAddPanel: () => setState(() => _staffAddPanelOpen = !_staffAddPanelOpen),
+                    onApprovalQueue: _showApprovalQueue,
+                    onAnalytics: _showStaffAnalytics,
+                    onMigrateLegacy: userRole == 'admin' ? _migrateLegacyProducts : null,
+                  ),
+                  AnimatedCrossFade(
+                    firstChild: const SizedBox(width: double.infinity, height: 0),
+                    secondChild: StaffManagementPanel(
+                      key: _staffPanelKey,
+                      userRole: userRole,
+                    ),
+                    crossFadeState:
+                        _staffAddPanelOpen ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                    duration: const Duration(milliseconds: 280),
+                    sizeCurve: Curves.easeOutCubic,
+                  ),
+                ],
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: DashboardHero(
+              key: ValueKey(LocaleService.instance.languageCode),
+              isWide: isWide,
+              refreshToken: _heroRefreshToken,
+              canManageSlides: _isStaff,
+              onContactTap: _contactViaWhatsApp,
+              onCategoryTap: _applyHeroFilter,
+            ),
+          ),
+          SliverToBoxAdapter(
+            key: _collectionKey,
+            child: _buildCollectionHeader(isWide, useInlineSidebar),
+          ),
+          _buildProductGrid(isWide),
+          const SliverToBoxAdapter(child: SizedBox(height: 60)),
+        ],
+      ),
+    );
+
+    if (kIsWeb) return scroll;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: scroll,
+      ),
     );
   }
 

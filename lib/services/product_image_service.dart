@@ -61,9 +61,12 @@ class ProductImageService {
   static Future<({List<String> imageUrls, String? barcodeUrl})> applyImageUpdate({
     required String productId,
     required ProductImageUpdate update,
+    bool deleteRemoved = true,
   }) async {
-    for (final url in update.removedImageUrls) {
-      await _deleteUrl(url);
+    if (deleteRemoved) {
+      for (final url in update.removedImageUrls) {
+        await _deleteUrl(url);
+      }
     }
 
     final urls = List<String>.from(update.keptImageUrls);
@@ -81,6 +84,12 @@ class ProductImageService {
     }
 
     return (imageUrls: urls, barcodeUrl: barcodeUrl);
+  }
+
+  static Future<void> deleteUrls(Iterable<String> urls) async {
+    for (final url in urls) {
+      await _deleteUrl(url);
+    }
   }
 
   static Future<void> deleteAllForProduct(

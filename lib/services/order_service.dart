@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/store_config.dart';
+import '../models/product_catalog.dart';
 import '../l10n/app_strings.dart';
 import '../models/cart_item.dart';
 
@@ -26,7 +27,7 @@ class OrderService {
       buffer.writeln('   ${S.fmt('order_msg_id', {'id': item.productId})}');
       buffer.writeln('   ${S.fmt('order_msg_size', {'size': item.selectedSize})}');
       if (item.selectedColor.isNotEmpty) {
-        buffer.writeln('   ${S.fmt('order_msg_color', {'color': item.selectedColor})}');
+        buffer.writeln('   ${S.fmt('order_msg_color', {'color': ProductCatalog.colorDisplayName(item.selectedColor)})}');
       }
       buffer.writeln('   ${S.fmt('order_msg_qty', {'qty': '${item.quantity}'})}');
       buffer.writeln('   ${S.fmt('order_msg_price_each', {'price': item.unitPrice.toStringAsFixed(2)})}');

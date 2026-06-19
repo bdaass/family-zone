@@ -78,7 +78,7 @@ class _StaffAnalyticsSheetState extends State<StaffAnalyticsSheet> {
                   return const Center(child: CircularProgressIndicator(color: AppColors.coral));
                 }
                 if (snap.hasError || !snap.hasData) {
-                  return Center(child: Text(S.fmt('update_failed', {'error': '${snap.error}'})));
+                  return Center(child: Text(S.of('products_load_error_detail')));
                 }
 
                 final data = snap.data!;

@@ -186,7 +186,7 @@ class _AddToCartSheetState extends State<AddToCartSheet> {
                 children: _colors.map((color) {
                   final selected = _selectedColor == color;
                   return ChoiceChip(
-                    label: Text(color),
+                    label: Text(ProductCatalog.colorDisplayName(color)),
                     selected: selected,
                     onSelected: (_) => setState(() => _selectedColor = color),
                     selectedColor: AppColors.coral,

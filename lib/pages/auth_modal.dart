@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../l10n/app_strings.dart';
+import '../utils/user_facing_error.dart';
 
 class AuthModalSheet extends StatefulWidget {
   const AuthModalSheet({super.key});
@@ -35,13 +36,19 @@ class _AuthModalSheetState extends State<AuthModalSheet> {
     );
   }
 
+  void _showAuthError(Object error) {
+    _showErrorDialog(
+      error is FirebaseAuthException ? UserFacingError.authMessage(error) : S.of('auth_error_generic'),
+    );
+  }
+
   Future<void> registerWithEmail(String email, String password) async {
     try {
       await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
       _showToast(S.of('auth_registered'));
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      _showErrorDialog(e.toString());
+      _showAuthError(e);
     }
   }
 
@@ -51,7 +58,7 @@ class _AuthModalSheetState extends State<AuthModalSheet> {
       _showToast(S.of('auth_welcome_back'));
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      _showErrorDialog(e.toString());
+      _showAuthError(e);
     }
   }
 
@@ -82,7 +89,7 @@ class _AuthModalSheetState extends State<AuthModalSheet> {
       _showToast(S.fmt('auth_google_success', {'email': userCredential.user?.email ?? ''}));
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      _showErrorDialog(e.toString());
+      _showAuthError(e);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

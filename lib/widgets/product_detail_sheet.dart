@@ -6,6 +6,7 @@ import '../models/product_catalog.dart';
 import '../services/product_share_service.dart';
 import '../services/product_view_service.dart';
 import '../theme/app_theme.dart';
+import '../pages/product_detail_page.dart';
 import 'product_image_carousel.dart';
 
 class ProductDetailSheet extends StatefulWidget {
@@ -125,8 +126,17 @@ class ProductDetailSheet extends StatefulWidget {
     );
 
     final isWide = MediaQuery.sizeOf(context).width > 720;
-    final useDialog = isWide || kIsWeb;
-    if (useDialog) {
+
+    if (kIsWeb) {
+      return Navigator.of(context, rootNavigator: true).push<void>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (ctx) => ProductDetailPage(child: sheet),
+        ),
+      );
+    }
+
+    if (isWide) {
       return showDialog(
         context: context,
         useRootNavigator: true,
@@ -429,7 +439,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: AppDecor.pill(color: AppColors.white),
                     child: Text(
-                      color,
+                      ProductCatalog.colorDisplayName(color),
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.ink),
                     ),
                   ),

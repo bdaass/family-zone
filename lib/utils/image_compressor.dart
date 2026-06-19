@@ -47,10 +47,7 @@ class ImageCompressor {
 
   static void ensureHeroUploadSize(Uint8List bytes) {
     if (bytes.length > heroUploadMaxBytes) {
-      throw StateError(
-        'Image is too large after compression (${(bytes.length / (1024 * 1024)).toStringAsFixed(1)} MB, max 3 MB). '
-        'Try a smaller photo.',
-      );
+      throw StateError('image_too_large');
     }
   }
 }
