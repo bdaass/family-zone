@@ -13,7 +13,6 @@ import '../models/product_catalog.dart';
 import '../models/top_slider_slide.dart';
 import '../services/favorite_service.dart';
 import '../services/product_catalog_service.dart';
-import '../services/catalog_migration_service.dart';
 import '../services/product_image_service.dart';
 import '../services/staff_storage_auth.dart';
 import '../theme/app_theme.dart';
@@ -554,42 +553,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     StaffAnalyticsSheet.show(context);
   }
 
-  Future<void> _migrateLegacyProducts() async {
-    if (userRole != 'admin') return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(S.of('staff_migrate_legacy_title')),
-        content: Text(S.of('staff_migrate_legacy_body')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.of('cancel'))),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.of('ok'))),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    try {
-      final result = await CatalogMigrationService.normalizeLegacyProducts();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(S.fmt('staff_migrate_legacy_done', {
-            'updated': '${result.updated}',
-            'total': '${result.total}',
-          })),
-        ),
-      );
-      _reloadCatalog();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of('staff_migrate_legacy_failed'))),
-      );
-    }
-  }
-
   Future<void> _tryOpenPendingProductLink() async {
     if (_pendingLinkHandled || _pendingProductLink == null || !_authResolved) return;
 
@@ -777,7 +740,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     onToggleAddPanel: () => setState(() => _staffAddPanelOpen = !_staffAddPanelOpen),
                     onApprovalQueue: _showApprovalQueue,
                     onAnalytics: _showStaffAnalytics,
-                    onMigrateLegacy: userRole == 'admin' ? _migrateLegacyProducts : null,
                   ),
                   AnimatedCrossFade(
                     firstChild: const SizedBox(width: double.infinity, height: 0),

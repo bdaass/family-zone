@@ -767,6 +767,119 @@ class ProductCatalog {
     return Map<String, dynamic>.from(raw);
   }
 
+  /// Human-readable lines for the approval queue (new items or pending edits).
+  static List<String> approvalChangeLines(Map<String, dynamic> data) {
+    final pending = pendingEditFrom(data);
+    if (pending != null && pending.isNotEmpty) {
+      return _pendingDiffLines(data, pending);
+    }
+    return _newItemSummaryLines(data);
+  }
+
+  static List<String> _newItemSummaryLines(Map<String, dynamic> data) {
+    final lines = <String>[
+      _approvalSetLine('field_title', titleFrom(data)),
+      _approvalSetLine('field_price', '\$${priceFrom(data).toStringAsFixed(2)}'),
+      _approvalSetLine('field_season', label(normalizeSeason(data['season']?.toString()))),
+      _approvalSetLine('field_category', label(normalizeType(data['type']?.toString()))),
+      _approvalSetLine('field_age_group', ageGroupLabel(normalizeAgeGroup(data['ageGroup']?.toString()))),
+      _approvalSetLine('field_sex', sexFormLabel(ageGroup: normalizeAgeGroup(data['ageGroup']?.toString()), sex: normalizeSex(data['sex']?.toString()))),
+    ];
+    final sizes = sizesFromField(sizeFrom(data));
+    if (sizes.isNotEmpty) {
+      lines.add(_approvalSetLine('size', sizes.join(' · ')));
+    }
+    final colorLabel = colorsDisplayLabel(colorsFrom(data));
+    if (colorLabel.isNotEmpty) {
+      lines.add(_approvalSetLine('color', colorLabel));
+    }
+    final stock = stockQtyFrom(data);
+    if (stock != null) {
+      lines.add(_approvalSetLine('field_branch_stock', '$stock'));
+    }
+    final photos = productImageUrlsFrom(data).length;
+    if (photos > 0) {
+      lines.add(S.fmt('approval_photo_count', {'count': '$photos'}));
+    }
+    return lines;
+  }
+
+  static List<String> _pendingDiffLines(Map<String, dynamic> live, Map<String, dynamic> pending) {
+    final lines = <String>[];
+    void compareStr(String key, String labelKey, {String Function(dynamic)? format}) {
+      if (!pending.containsKey(key)) return;
+      final next = pending[key];
+      if (next == null) {
+        final prev = live[key];
+        if (prev != null && prev.toString().trim().isNotEmpty) {
+          lines.add(S.fmt('approval_change_cleared', {'field': S.of(labelKey)}));
+        }
+        return;
+      }
+      final fmt = format ?? _plainStr;
+      final from = fmt(live[key]);
+      final to = fmt(next);
+      if (from == to) return;
+      lines.add(S.fmt('approval_change_line', {'field': S.of(labelKey), 'from': from, 'to': to}));
+    }
+
+    compareStr('title', 'field_title');
+    compareStr('description', 'field_description');
+    compareStr('price', 'field_price', format: (v) => '\$${_num(v).toStringAsFixed(2)}');
+    compareStr('soldPrice', 'field_sale_price', format: (v) => v == null ? '—' : '\$${_num(v).toStringAsFixed(2)}');
+    compareStr('discountPercent', 'field_discount_percent', format: (v) => v == null ? '—' : '${_int(v)}%');
+    compareStr('size', 'size', format: (v) => sizesDisplayLabel(v?.toString()));
+    compareStr('colors', 'color', format: (v) => colorsDisplayLabel(v?.toString()));
+    compareStr('season', 'field_season', format: (v) => label(normalizeSeason(v?.toString())));
+    compareStr('ageGroup', 'field_age_group', format: (v) => ageGroupLabel(normalizeAgeGroup(v?.toString())));
+    compareStr('sex', 'field_sex', format: (v) {
+      final age = normalizeAgeGroup(pending['ageGroup']?.toString() ?? live['ageGroup']?.toString());
+      return sexFormLabel(ageGroup: age, sex: normalizeSex(v?.toString()));
+    });
+    compareStr('type', 'field_category', format: (v) => label(normalizeType(v?.toString())));
+    compareStr('stockQty', 'field_branch_stock', format: (v) => v == null ? '—' : '${_int(v)}');
+
+    if (pending.containsKey('imageUrls')) {
+      final oldCount = productImageUrlsFrom(live).length;
+      final raw = pending['imageUrls'];
+      final newCount = raw is List ? raw.length : oldCount;
+      if (oldCount != newCount) {
+        lines.add(S.fmt('approval_change_line', {
+          'field': S.of('field_photos'),
+          'from': '$oldCount',
+          'to': '$newCount',
+        }));
+      }
+    }
+
+    if (lines.isEmpty) {
+      lines.add(S.of('approval_no_visible_changes'));
+    }
+    return lines;
+  }
+
+  static String _approvalSetLine(String labelKey, String value) {
+    return S.fmt('approval_change_set', {'field': S.of(labelKey), 'value': value});
+  }
+
+  static String _plainStr(dynamic value) => (value ?? '').toString().trim();
+
+  static double _num(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static int _int(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static String? primaryImageUrlOrNull(Map<String, dynamic> data) {
+    final urls = productImageUrlsFrom(data);
+    if (urls.isEmpty) return null;
+    return urls.first;
+  }
+
   /// Listed more than [oldProductMonths] months ago (admin inventory hint).
   static bool isOlderThanSixMonths(Map<String, dynamic> data, {DateTime? now}) {
     final created = createdAtFrom(data);

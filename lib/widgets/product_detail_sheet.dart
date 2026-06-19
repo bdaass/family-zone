@@ -380,26 +380,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         ],
         if (widget.showBarcodeImage && widget.barcodeImageUrl?.isNotEmpty == true) ...[
           const SizedBox(height: 20),
-          Text(
-            S.of('field_barcode_admin_only'),
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.creamDark,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Image.network(
-                widget.barcodeImageUrl!,
-                height: 120,
-                width: double.infinity,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
+          _AdminBarcodePreview(imageUrl: widget.barcodeImageUrl!),
         ],
         const SizedBox(height: 20),
         Text(
@@ -561,6 +542,109 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         label,
         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.8),
       ),
+    );
+  }
+}
+
+class _AdminBarcodePreview extends StatelessWidget {
+  final String imageUrl;
+
+  const _AdminBarcodePreview({required this.imageUrl});
+
+  void _openZoom(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierColor: AppColors.ink.withValues(alpha: 0.85),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.network(imageUrl, fit: BoxFit.contain),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                onPressed: () => Navigator.pop(ctx),
+                icon: const Icon(Icons.close_rounded, color: AppColors.white, size: 28),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          S.of('field_barcode_admin_only'),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+        ),
+        const SizedBox(height: 8),
+        Material(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: () => _openZoom(context),
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.creamDark),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: DecoratedBox(
+                      decoration: const BoxDecoration(color: AppColors.cream),
+                      child: Image.network(
+                        imageUrl,
+                        height: 220,
+                        width: double.infinity,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.zoom_in_rounded, size: 16, color: AppColors.inkMuted),
+                      const SizedBox(width: 6),
+                      Text(
+                        S.of('barcode_tap_to_zoom'),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

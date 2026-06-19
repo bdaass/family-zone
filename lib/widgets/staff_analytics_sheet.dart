@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../services/staff_insights_service.dart';
 import '../theme/app_theme.dart';
+import 'product_image_carousel.dart';
 
 class StaffAnalyticsSheet extends StatefulWidget {
   const StaffAnalyticsSheet({super.key});
@@ -97,6 +98,8 @@ class _StaffAnalyticsSheetState extends State<StaffAnalyticsSheet> {
                       empty: S.of('analytics_empty'),
                       items: data.topViewed
                           .map((p) => _InsightLine(
+                                productId: p.productId,
+                                imageUrl: p.imageUrl,
                                 title: p.title,
                                 meta: S.fmt('analytics_views', {'count': '${p.viewCount}'}),
                               ))
@@ -108,6 +111,8 @@ class _StaffAnalyticsSheetState extends State<StaffAnalyticsSheet> {
                       empty: S.of('analytics_empty'),
                       items: data.topFavorited
                           .map((p) => _InsightLine(
+                                productId: p.productId,
+                                imageUrl: p.imageUrl,
                                 title: p.title,
                                 meta: S.fmt('analytics_favorites', {'count': '${p.favoriteCount}'}),
                               ))
@@ -122,7 +127,13 @@ class _StaffAnalyticsSheetState extends State<StaffAnalyticsSheet> {
                             final meta = p.sold
                                 ? S.of('badge_sold_out')
                                 : S.fmt('analytics_stock_left', {'count': '${p.stockQty ?? 0}'});
-                            return _InsightLine(title: p.title, meta: meta, alert: true);
+                            return _InsightLine(
+                              productId: p.productId,
+                              imageUrl: p.imageUrl,
+                              title: p.title,
+                              meta: meta,
+                              alert: true,
+                            );
                           })
                           .toList(),
                     ),
@@ -195,11 +206,19 @@ class _Section extends StatelessWidget {
 }
 
 class _InsightLine extends StatelessWidget {
+  final String productId;
+  final String? imageUrl;
   final String title;
   final String meta;
   final bool alert;
 
-  const _InsightLine({required this.title, required this.meta, this.alert = false});
+  const _InsightLine({
+    required this.productId,
+    this.imageUrl,
+    required this.title,
+    required this.meta,
+    this.alert = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -212,8 +231,37 @@ class _InsightLine extends StatelessWidget {
       ),
       child: Row(
         children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: imageUrl != null
+                  ? ProductThumbnail(imageUrl: imageUrl!, fit: BoxFit.cover)
+                  : ColoredBox(
+                      color: AppColors.creamDark,
+                      child: Icon(Icons.image_not_supported_outlined, size: 18, color: AppColors.inkMuted.withValues(alpha: 0.6)),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
-            child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  S.fmt('product_id_label', {'id': productId}),
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
+                ),
+              ],
+            ),
           ),
           const SizedBox(width: 8),
           Text(meta, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: alert ? AppColors.coral : AppColors.inkMuted)),

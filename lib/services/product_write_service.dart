@@ -124,6 +124,32 @@ class ProductWriteService {
     });
   }
 
+  /// Rejects a pending edit or removes an unpublished new item.
+  static Future<void> declineProduct(String docId) async {
+    final ref = FirebaseFirestore.instance.collection('products').doc(docId);
+    final snap = await ref.get();
+    if (!snap.exists) throw StateError('product_not_found');
+
+    final data = snap.data()!;
+    if (ProductCatalog.hasPendingEdit(data)) {
+      await ref.update({
+        'pendingEdit': FieldValue.delete(),
+        'editPending': false,
+        'needsApproval': false,
+        'pendingEditAt': FieldValue.delete(),
+        'pendingEditBy': FieldValue.delete(),
+      });
+      return;
+    }
+
+    await ProductImageService.deleteAllForProduct(
+      docId,
+      imageUrls: ProductCatalog.productImageUrlsFrom(data),
+      barcodeImageUrl: ProductCatalog.barcodeImageUrlFrom(data),
+    );
+    await ref.delete();
+  }
+
   static Map<String, dynamic> _pendingPayloadFrom(Map<String, dynamic> proposed) {
     final pending = <String, dynamic>{};
     for (final entry in proposed.entries) {

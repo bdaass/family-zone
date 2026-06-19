@@ -6,6 +6,7 @@ class StaffProductInsight {
   final String docId;
   final String productId;
   final String title;
+  final String? imageUrl;
   final int viewCount;
   final int favoriteCount;
   final int? stockQty;
@@ -15,6 +16,7 @@ class StaffProductInsight {
     required this.docId,
     required this.productId,
     required this.title,
+    this.imageUrl,
     required this.viewCount,
     required this.favoriteCount,
     this.stockQty,
@@ -27,6 +29,7 @@ class StaffProductInsight {
       docId: doc.id,
       productId: ProductCatalog.productIdFrom(data, doc.id),
       title: ProductCatalog.titleFrom(data),
+      imageUrl: ProductCatalog.primaryImageUrlOrNull(data),
       viewCount: ProductCatalog.viewCountFrom(data),
       favoriteCount: ProductCatalog.favoriteCountFrom(data),
       stockQty: ProductCatalog.stockQtyFrom(data),
