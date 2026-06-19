@@ -50,5 +50,9 @@
 		<string>whatsapp</string>
 		<string>https</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Take product and barcode photos for the catalogue.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose product and barcode photos from your library.</string>
 </dict>
 </plist>

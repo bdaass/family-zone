@@ -58,21 +58,73 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
     widget.onRemovedUrlsChanged(List<String>.from(_removedUrls));
   }
 
+  Future<ImageSource?> _chooseImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.cream,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  S.of('image_source_title'),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.ink),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: AppColors.ink),
+                title: Text(S.of('image_source_gallery'), style: const TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined, color: AppColors.ink),
+                title: Text(S.of('image_source_camera'), style: const TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<List<Uint8List>> _compressPickedFiles(List<XFile> picked) async {
+    final compressed = <Uint8List>[];
+    for (final file in picked) {
+      final raw = await file.readAsBytes();
+      final result = await ImageCompressor.compressForUpload(raw);
+      compressed.add(result ?? raw);
+    }
+    return compressed;
+  }
+
   Future<void> _pickProductImages() async {
+    if (_isCompressing) return;
+    final source = await _chooseImageSource();
+    if (source == null || !mounted) return;
+
     try {
       setState(() => _isCompressing = true);
-      final picked = await _picker.pickMultiImage();
+      final List<XFile> picked;
+      if (source == ImageSource.gallery) {
+        picked = await _picker.pickMultiImage();
+      } else {
+        final single = await _picker.pickImage(source: ImageSource.camera);
+        picked = single != null ? [single] : [];
+      }
       if (picked.isEmpty) {
         if (mounted) setState(() => _isCompressing = false);
         return;
       }
 
-      final compressed = <Uint8List>[];
-      for (final file in picked) {
-        final raw = await file.readAsBytes();
-        final result = await ImageCompressor.compressForUpload(raw);
-        compressed.add(result ?? raw);
-      }
+      final compressed = await _compressPickedFiles(picked);
 
       if (!mounted) return;
       setState(() {
@@ -87,9 +139,13 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
   }
 
   Future<void> _pickBarcodeImage() async {
+    if (_isCompressing) return;
+    final source = await _chooseImageSource();
+    if (source == null || !mounted) return;
+
     try {
       setState(() => _isCompressing = true);
-      final picked = await _picker.pickImage(source: ImageSource.gallery);
+      final picked = await _picker.pickImage(source: source);
       if (picked == null) {
         if (mounted) setState(() => _isCompressing = false);
         return;
