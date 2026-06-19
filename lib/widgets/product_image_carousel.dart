@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_image_settings.dart';
 
@@ -125,6 +127,41 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
     _startAutoPlay();
   }
 
+  void _goToPage(int page) {
+    if (page < 0 || page >= _urls.length) return;
+    setState(() => _index = page);
+    if (_pageController?.hasClients == true) {
+      _pageController!.animateToPage(
+        page,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _previous() {
+    if (_urls.length < 2) return;
+    _goToPage((_index - 1 + _urls.length) % _urls.length);
+  }
+
+  void _next() {
+    if (_urls.length < 2) return;
+    _goToPage((_index + 1) % _urls.length);
+  }
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent || _urls.length < 2) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _previous();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _next();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -139,17 +176,38 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
     }
 
     if (widget.interactive) {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          PageView.builder(
-            controller: _pageController,
-            itemCount: _urls.length,
-            onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (context, i) => ProductNetworkImage(url: _urls[i], fit: widget.fit),
-          ),
-          if (widget.showIndicators && _urls.length > 1) _dots(),
-        ],
+      final multi = _urls.length > 1;
+      return Focus(
+        autofocus: kIsWeb && multi,
+        onKeyEvent: _handleKey,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            PageView.builder(
+              controller: _pageController,
+              itemCount: _urls.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (context, i) => ProductNetworkImage(url: _urls[i], fit: widget.fit),
+            ),
+            if (multi) ...[
+              _navButton(
+                context: context,
+                tooltip: S.of('carousel_prev'),
+                icon: Icons.chevron_left_rounded,
+                onTap: _previous,
+                atStart: true,
+              ),
+              _navButton(
+                context: context,
+                tooltip: S.of('carousel_next'),
+                icon: Icons.chevron_right_rounded,
+                onTap: _next,
+                atStart: false,
+              ),
+            ],
+            if (widget.showIndicators && multi) _dots(interactive: true),
+          ],
+        ),
       );
     }
 
@@ -164,12 +222,50 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
             fit: widget.fit,
           ),
         ),
-        if (widget.showIndicators && _urls.length > 1) _dots(),
+        if (widget.showIndicators && _urls.length > 1) _dots(interactive: false),
       ],
     );
   }
 
-  Widget _dots() {
+  Widget _navButton({
+    required BuildContext context,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool atStart,
+  }) {
+    return Positioned.directional(
+      textDirection: Directionality.of(context),
+      start: atStart ? 8 : null,
+      end: atStart ? null : 8,
+      top: 0,
+      bottom: 0,
+      child: Center(
+        child: Tooltip(
+          message: tooltip,
+          child: Material(
+            color: AppColors.ink.withValues(alpha: 0.5),
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(
+                  icon,
+                  color: AppColors.white,
+                  size: 26,
+                  semanticLabel: tooltip,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dots({required bool interactive}) {
     return Positioned(
       bottom: 10,
       left: 0,
@@ -178,7 +274,7 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: List.generate(_urls.length, (i) {
           final active = i == _index;
-          return AnimatedContainer(
+          final dot = AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             margin: const EdgeInsets.symmetric(horizontal: 3),
             width: active ? 8 : 6,
@@ -187,6 +283,15 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
               shape: BoxShape.circle,
               color: active ? AppColors.white : AppColors.white.withValues(alpha: 0.55),
               boxShadow: active ? AppColors.elevationShadow(opacity: 0.2, blur: 4, y: 1) : null,
+            ),
+          );
+          if (!interactive) return dot;
+          return GestureDetector(
+            onTap: () => _goToPage(i),
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: dot,
             ),
           );
         }),
