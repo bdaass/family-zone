@@ -48,6 +48,28 @@ class ProductImageService {
     return ref.getDownloadURL();
   }
 
+  /// Resolves a barcode image URL for admin viewing on web and mobile.
+  ///
+  /// Barcode files are staff-only in Storage rules (not public like product photos).
+  static Future<String> resolveBarcodeViewUrl({
+    required String productStorageId,
+    String? storedUrl,
+  }) async {
+    final trimmedId = productStorageId.trim();
+    if (trimmedId.isNotEmpty) {
+      try {
+        final ref = FirebaseStorage.instance.ref().child(barcodeImagePath(trimmedId));
+        return await ref.getDownloadURL();
+      } catch (e, st) {
+        debugPrint('ProductImageService: barcode resolve via ref failed: $e\n$st');
+      }
+    }
+
+    final fallback = storedUrl?.trim();
+    if (fallback != null && fallback.isNotEmpty) return fallback;
+    throw StateError('barcode_url_unavailable');
+  }
+
   static Future<({List<String> imageUrls, String barcodeUrl})> uploadNewProductImages({
     required String productId,
     required List<Uint8List> productImages,

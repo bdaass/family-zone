@@ -285,6 +285,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
                   initialImageUrls: widget.imageUrls,
                   hasExistingBarcode: widget.hasBarcode,
                   existingBarcodeUrl: widget.barcodeImageUrl,
+                  storageProductId: widget.productId,
                   showBarcodePreview: widget.showBarcodePreview,
                   onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
                   onNewImagesChanged: (images) => _newProductImages = images,

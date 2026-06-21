@@ -1,11 +1,11 @@
-import 'dart:typed_data';
-
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../theme/app_theme.dart';
+import '../utils/user_facing_error.dart';
 import '../services/product_catalog_service.dart';
 import '../services/product_image_service.dart';
 import '../services/staff_storage_auth.dart';
@@ -162,7 +162,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     setState(() => _isUploading = true);
 
     try {
-      await StaffStorageAuth.prepareForUpload();
+      final staffRole = await StaffStorageAuth.prepareForUpload();
 
       if (await ProductWriteService.productDocExists(productId)) {
         if (mounted) {
@@ -177,7 +177,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         barcodeImage: _barcodeImage!,
       );
 
-      final isAdmin = widget.userRole == 'admin';
+      final isAdmin = staffRole == 'admin';
       final season = _formSeason ?? 'summer';
       final ageGroup = _formAgeGroup ?? 'adult';
       final sex = _formSex ?? 'female';
@@ -189,7 +189,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         'description': description,
         'size': size,
         if (colors.isNotEmpty) 'colors': colors,
-        'price': priceParsed,
+        'price': priceParsed.toDouble(),
         if (discountPercent != null) ...{
           'discountPercent': discountPercent,
           'soldPrice': soldPriceParsed,
@@ -264,9 +264,12 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
             : S.fmt('staff_submitted_success', {'id': productId});
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       }
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('Staff add product failed: $e\n$st');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('staff_upload_failed'))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(UserFacingError.message(e, fallbackKey: 'staff_upload_failed'))),
+        );
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);

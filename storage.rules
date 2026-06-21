@@ -7,7 +7,6 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Same source of truth as firestore.rules — not JWT custom claims.
     function userDocPath() {
       return /databases/(default)/documents/users/$(request.auth.uid);
     }
@@ -16,16 +15,23 @@ service firebase.storage {
       return isSignedIn() && firestore.exists(userDocPath());
     }
 
-    function userRole() {
-      return firestore.get(userDocPath()).data.role;
+    function authRole() {
+      return isSignedIn() ? request.auth.token.get('role', '') : '';
+    }
+
+    function firestoreRole() {
+      return userExists() ? firestore.get(userDocPath()).data.get('role', '') : '';
     }
 
     function isAdmin() {
-      return userExists() && userRole() == 'admin';
+      return isSignedIn()
+        && (authRole() == 'admin' || firestoreRole() == 'admin');
     }
 
     function isStaff() {
-      return userExists() && userRole() in ['admin', 'employee'];
+      return isSignedIn()
+        && (authRole() in ['admin', 'employee']
+          || firestoreRole() in ['admin', 'employee']);
     }
 
     function isValidProductImage() {
@@ -39,7 +45,8 @@ service firebase.storage {
     }
 
     match /product_images/{productId}/{fileName} {
-      allow read: if fileName != 'barcode.jpg' || isAdmin();
+      // Product photos are public. Barcodes are staff-only (employees must read after upload).
+      allow read: if fileName != 'barcode.jpg' || isStaff();
 
       allow create: if isStaff()
         && isValidProductImage()

@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../l10n/app_strings.dart';
+import '../services/product_image_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/image_compressor.dart';
+import 'product_image_carousel.dart';
 
 /// Staff product photos + mandatory barcode capture (barcode preview admin-only on edit).
 class ProductImagesField extends StatefulWidget {
   final List<String> initialImageUrls;
   final bool hasExistingBarcode;
   final String? existingBarcodeUrl;
+  final String? storageProductId;
   final bool showBarcodePreview;
   final bool dense;
   final ValueChanged<List<String>> onKeptUrlsChanged;
@@ -24,6 +27,7 @@ class ProductImagesField extends StatefulWidget {
     this.initialImageUrls = const [],
     this.hasExistingBarcode = false,
     this.existingBarcodeUrl,
+    this.storageProductId,
     this.showBarcodePreview = false,
     this.dense = false,
     required this.onKeptUrlsChanged,
@@ -234,7 +238,7 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.showBarcodePreview && widget.existingBarcodeUrl?.isNotEmpty == true && _barcodeBytes == null)
-              _thumbNetwork(widget.existingBarcodeUrl!, thumb, _pickBarcodeImage)
+              _barcodeNetworkThumb(widget.existingBarcodeUrl!, thumb, _pickBarcodeImage)
             else if (_barcodeBytes != null)
               _thumbMemory(_barcodeBytes!, thumb, _clearBarcode)
             else if (hasBarcode && !widget.showBarcodePreview)
@@ -258,8 +262,45 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
       Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(url, fit: BoxFit.cover),
+          ProductNetworkImage(url: url, fit: BoxFit.cover),
           _removeButton(onRemove),
+        ],
+      ),
+    );
+  }
+
+  Widget _barcodeNetworkThumb(String url, double size, VoidCallback onReplace) {
+    final storageId = widget.storageProductId?.trim() ?? '';
+    return _thumbFrame(
+      size,
+      Stack(
+        fit: StackFit.expand,
+        children: [
+          FutureBuilder<String>(
+            future: ProductImageService.resolveBarcodeViewUrl(
+              productStorageId: storageId,
+              storedUrl: url,
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral),
+                  ),
+                );
+              }
+              final resolved = snapshot.data;
+              if (snapshot.hasError || resolved == null || resolved.isEmpty) {
+                return const Center(
+                  child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 20),
+                );
+              }
+              return ProductNetworkImage(url: resolved, fit: BoxFit.cover);
+            },
+          ),
+          _removeButton(onReplace),
         ],
       ),
     );

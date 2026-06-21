@@ -9,7 +9,10 @@ import 'package:flutter/foundation.dart';
 /// (same as [firestore.rules]). Refreshes the auth token after syncing claims.
 class StaffStorageAuth {
   /// Verifies the signed-in user has a staff role in Firestore.
-  static Future<void> prepareForUpload() async {
+  ///
+  /// Returns the Firestore role (`admin` or `employee`) — use this for writes
+  /// so moderation fields match [firestore.rules], not a possibly stale UI role.
+  static Future<String> prepareForUpload() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw FirebaseAuthException(code: 'user-not-signed-in', message: 'Sign in required to upload.');
@@ -30,11 +33,13 @@ class StaffStorageAuth {
     try {
       final callable = FirebaseFunctions.instanceFor(region: 'europe-west1').httpsCallable('syncMyRoleClaims');
       await callable.call();
+      await user.getIdToken(true);
     } catch (e) {
       debugPrint('StaffStorageAuth: claim sync skipped: $e');
+      await user.getIdToken(true);
     }
 
-    await user.getIdToken(true);
+    return role;
   }
 
   static Future<String?> _firestoreRole(String uid) async {

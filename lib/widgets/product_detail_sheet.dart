@@ -5,6 +5,8 @@ import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../services/product_share_service.dart';
 import '../services/product_view_service.dart';
+import '../services/product_image_service.dart';
+import '../utils/product_image_settings.dart';
 import '../theme/app_theme.dart';
 import '../pages/product_detail_page.dart';
 import 'product_image_carousel.dart';
@@ -380,7 +382,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         ],
         if (widget.showBarcodeImage && widget.barcodeImageUrl?.isNotEmpty == true) ...[
           const SizedBox(height: 20),
-          _AdminBarcodePreview(imageUrl: widget.barcodeImageUrl!),
+          _AdminBarcodePreview(
+            imageUrl: widget.barcodeImageUrl!,
+            storageProductId: widget.productDocId.isNotEmpty ? widget.productDocId : widget.productId,
+          ),
         ],
         const SizedBox(height: 20),
         Text(
@@ -546,12 +551,33 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   }
 }
 
-class _AdminBarcodePreview extends StatelessWidget {
+class _AdminBarcodePreview extends StatefulWidget {
   final String imageUrl;
+  final String storageProductId;
 
-  const _AdminBarcodePreview({required this.imageUrl});
+  const _AdminBarcodePreview({
+    required this.imageUrl,
+    required this.storageProductId,
+  });
 
-  void _openZoom(BuildContext context) {
+  @override
+  State<_AdminBarcodePreview> createState() => _AdminBarcodePreviewState();
+}
+
+class _AdminBarcodePreviewState extends State<_AdminBarcodePreview> {
+  late Future<String> _urlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlFuture = ProductImageService.resolveBarcodeViewUrl(
+      productStorageId: widget.storageProductId,
+      storedUrl: widget.imageUrl,
+    );
+  }
+
+  void _openZoom(BuildContext context, String url) {
+    final size = MediaQuery.sizeOf(context);
     showDialog<void>(
       context: context,
       useRootNavigator: true,
@@ -572,7 +598,15 @@ class _AdminBarcodePreview extends StatelessWidget {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: Image.network(imageUrl, fit: BoxFit.contain),
+                    child: SizedBox(
+                      width: size.width * 0.9,
+                      height: size.height * 0.8,
+                      child: ProductNetworkImage(
+                        url: url,
+                        fit: BoxFit.contain,
+                        cacheSize: ProductImageSettings.detailCacheSize,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -591,6 +625,20 @@ class _AdminBarcodePreview extends StatelessWidget {
     );
   }
 
+  Widget _imageFrame({required Widget child}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(color: AppColors.cream),
+        child: SizedBox(
+          height: 220,
+          width: double.infinity,
+          child: child,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -601,48 +649,69 @@ class _AdminBarcodePreview extends StatelessWidget {
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
         ),
         const SizedBox(height: 8),
-        Material(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            onTap: () => _openZoom(context),
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              decoration: BoxDecoration(
+        FutureBuilder<String>(
+          future: _urlFuture,
+          builder: (context, snapshot) {
+            final loading = snapshot.connectionState != ConnectionState.done;
+            final url = snapshot.data;
+            final failed = snapshot.hasError || (!loading && (url == null || url.isEmpty));
+
+            return Material(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                onTap: loading || failed || url == null ? null : () => _openZoom(context, url),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.creamDark),
-              ),
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: DecoratedBox(
-                      decoration: const BoxDecoration(color: AppColors.cream),
-                      child: Image.network(
-                        imageUrl,
-                        height: 220,
-                        width: double.infinity,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.creamDark),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
                     children: [
-                      const Icon(Icons.zoom_in_rounded, size: 16, color: AppColors.inkMuted),
-                      const SizedBox(width: 6),
-                      Text(
-                        S.of('barcode_tap_to_zoom'),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
+                      if (loading)
+                        _imageFrame(
+                          child: const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral),
+                            ),
+                          ),
+                        )
+                      else if (failed)
+                        _imageFrame(
+                          child: const Center(
+                            child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 32),
+                          ),
+                        )
+                      else
+                        _imageFrame(
+                          child: ProductNetworkImage(
+                            url: url!,
+                            fit: BoxFit.contain,
+                            cacheSize: ProductImageSettings.detailCacheSize,
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.zoom_in_rounded, size: 16, color: AppColors.inkMuted),
+                          const SizedBox(width: 6),
+                          Text(
+                            S.of('barcode_tap_to_zoom'),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ],
     );

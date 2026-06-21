@@ -303,22 +303,29 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
 class ProductNetworkImage extends StatelessWidget {
   final String url;
   final BoxFit fit;
+  final int? cacheSize;
 
-  const ProductNetworkImage({super.key, required this.url, required this.fit});
+  const ProductNetworkImage({
+    super.key,
+    required this.url,
+    required this.fit,
+    this.cacheSize,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (url.trim().isEmpty) {
       return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 32));
     }
+    final decodedSize = cacheSize ?? ProductImageSettings.displayCacheSize;
     return Image.network(
       url,
       fit: fit,
       alignment: Alignment.topCenter,
       width: double.infinity,
       height: double.infinity,
-      cacheWidth: ProductImageSettings.displayCacheSize,
-      cacheHeight: ProductImageSettings.displayCacheSize,
+      cacheWidth: decodedSize,
+      cacheHeight: decodedSize,
       webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Product image load failed: $error');

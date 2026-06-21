@@ -17,7 +17,27 @@ class UserFacingError {
     if (error is FirebaseAuthException) {
       return authMessage(error);
     }
+    if (error is FirebaseException) {
+      return _firebaseMessage(error);
+    }
     return S.of(fallbackKey);
+  }
+
+  static String _firebaseMessage(FirebaseException error) {
+    switch (error.code) {
+      case 'permission-denied':
+        return S.of('staff_permission_denied');
+      case 'unauthenticated':
+        return S.of('auth_error_generic');
+      case 'unavailable':
+      case 'network-request-failed':
+        return S.of('auth_error_network');
+      case 'unauthorized':
+      case 'storage/unauthorized':
+        return S.of('staff_storage_denied');
+      default:
+        return S.of('staff_upload_failed');
+    }
   }
 
   static String authMessage(FirebaseAuthException error) {
@@ -41,6 +61,12 @@ class UserFacingError {
       case 'popup-closed-by-user':
       case 'cancelled-popup-request':
         return S.of('auth_error_cancelled');
+      case 'user-not-signed-in':
+        return S.of('auth_error_generic');
+      case 'profile-missing':
+        return S.of('staff_profile_missing');
+      case 'staff-role-required':
+        return S.of('staff_role_required');
       default:
         return S.of('auth_error_generic');
     }

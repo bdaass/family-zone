@@ -19,16 +19,38 @@ service cloud.firestore {
     return get(userDocPath()).data;
   }
 
+  // Role from JWT custom claims (synced by syncUserRoleToClaims / syncMyRoleClaims).
+  function authRole() {
+    return isSignedIn() ? request.auth.token.get('role', '') : '';
+  }
+
+  // Role from Firestore users/{uid}.role (source of truth).
+  function firestoreRole() {
+    return userExists() ? userData().get('role', '') : '';
+  }
+
   function isAdmin() {
-    return userExists() && userData().role == 'admin';
+    return isSignedIn()
+      && (authRole() == 'admin' || firestoreRole() == 'admin');
   }
 
   function isEmployee() {
-    return userExists() && userData().role == 'employee';
+    return isSignedIn()
+      && (authRole() == 'employee' || firestoreRole() == 'employee');
   }
 
   function isStaff() {
     return isAdmin() || isEmployee();
+  }
+
+  // Product writes use Firestore role only (matches StaffStorageAuth + storage.rules).
+  function isStaffFromFirestore() {
+    return firestoreRole() in ['admin', 'employee'];
+  }
+
+  function staffCreateProductAllowed() {
+    return (firestoreRole() == 'admin' && adminCreateProduct())
+      || (firestoreRole() == 'employee' && employeeCreateProduct());
   }
 
   function isOwner(userId) {
@@ -38,6 +60,11 @@ service cloud.firestore {
   function isPublicProduct(data) {
     return data.visibility == true
       && (!('approved' in data) || data.approved != false);
+  }
+
+  function canReadProduct() {
+    return isStaff()
+      || (resource != null && isPublicProduct(resource.data));
   }
 
   function onlyFieldsChanged(allowed) {
@@ -53,16 +80,21 @@ service cloud.firestore {
       && (!('approved' in resource.data) || resource.data.approved != false);
   }
 
-  function validProductCreate() {
-    return request.resource.data.productId == productId
+  function validProductCreate(id) {
+    return request.resource.data.productId == id
       && request.resource.data.title is string
       && request.resource.data.title.size() > 0
       && request.resource.data.description is string
       && request.resource.data.description.size() > 0
-      && request.resource.data.price is number
+      && (request.resource.data.price is int || request.resource.data.price is float)
       && request.resource.data.price >= 0
       && request.resource.data.visibility is bool
       && request.resource.data.approved is bool;
+  }
+
+  function adminCreateProduct() {
+    return request.resource.data.approved == true
+      && request.resource.data.visibility == true;
   }
 
   function employeeCreateProduct() {
@@ -119,11 +151,11 @@ service cloud.firestore {
 
   // ── Products ─────────────────────────────────────────────────────────────
   match /products/{productId} {
-    allow read: if isPublicProduct(resource.data)
-      || (userExists() && isStaff());
+    allow read: if canReadProduct();
 
-    allow create: if validProductCreate()
-      && (isAdmin() || (isEmployee() && employeeCreateProduct()));
+    allow create: if isStaffFromFirestore()
+      && validProductCreate(productId)
+      && staffCreateProductAllowed();
 
     allow delete: if isAdmin();
 

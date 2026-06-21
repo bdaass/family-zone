@@ -7,8 +7,19 @@ import 'product_image_service.dart';
 
 class ProductWriteService {
   static Future<bool> productDocExists(String productId) async {
-    final snap = await FirebaseFirestore.instance.collection('products').doc(productId).get();
-    return snap.exists;
+    final trimmed = productId.trim();
+    if (trimmed.isEmpty) return false;
+
+    try {
+      final snap = await FirebaseFirestore.instance.collection('products').doc(trimmed).get();
+      return snap.exists;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        debugPrint('productDocExists: permission denied for $trimmed — treating as available');
+        return false;
+      }
+      rethrow;
+    }
   }
 
   static Future<void> updateProduct({
