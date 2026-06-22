@@ -30,12 +30,20 @@ class ProductCatalog {
     return trimmed.isNotEmpty && trimmed.length <= 64 && _productIdPattern.hasMatch(trimmed);
   }
 
-  /// True when the search term should use product-ID lookup (contains a digit).
-  static bool isIdSearchTerm(String token) {
+  /// True when the query should use product-ID prefix search (e.g. F, FZ, FZ153).
+  static bool looksLikeIdPrefix(String token) {
     final trimmed = token.trim();
     if (!isValidProductId(trimmed)) return false;
-    return RegExp(r'\d').hasMatch(trimmed);
+    if (RegExp(r'\d').hasMatch(trimmed)) return true;
+    // Short letter-only prefixes of SKU-style IDs (e.g. FZ1024).
+    if (trimmed.length <= 3 && RegExp(r'^[A-Za-z]+$').hasMatch(trimmed)) {
+      return RegExp(r'^F', caseSensitive: false).hasMatch(trimmed);
+    }
+    return false;
   }
+
+  /// True when the search term should use product-ID lookup.
+  static bool isIdSearchTerm(String token) => looksLikeIdPrefix(token);
 
   static String normalizedIdSearch(String query) => query.trim().toLowerCase();
 
@@ -339,7 +347,7 @@ class ProductCatalog {
         matchesType(data['type']?.toString(), categoryFilter);
   }
 
-  /// Matches title, description, product ID, size, and catalog labels.
+  /// Matches product title or ID only (title substring; ID prefix).
   static bool matchesSearch({
     required Map<String, dynamic> data,
     required String docId,
@@ -351,36 +359,25 @@ class ProductCatalog {
     final terms = normalized.split(RegExp(r'\s+')).where((token) => token.isNotEmpty).toList();
     final productId = productIdFrom(data, docId).toLowerCase();
     final documentId = docId.toLowerCase();
+    final title = titleFrom(data).toLowerCase();
 
-    if (terms.length == 1 && isIdSearchTerm(terms.first)) {
+    bool idMatches(String term) =>
+        productId.startsWith(term) || documentId.startsWith(term);
+
+    if (terms.length == 1) {
       final term = terms.first;
-      return productId.contains(term) || documentId.contains(term);
+      if (looksLikeIdPrefix(term)) return idMatches(term);
+      return title.contains(term);
     }
 
-    final season = normalizeSeason(data['season']?.toString());
-    final audience = audienceFrom(data);
-    final type = normalizeType(data['type']?.toString());
-
-    final haystack = [
-      titleFrom(data),
-      descriptionFrom(data),
-      productIdFrom(data, docId),
-      docId,
-      sizeFrom(data),
-      colorsFrom(data),
-      season,
-      audience.ageGroup,
-      audience.sex,
-      type,
-      localizedCatalogLabel(season),
-      ageGroupLabel(audience.ageGroup),
-      sexFormLabel(ageGroup: audience.ageGroup, sex: audience.sex),
-      localizedCatalogLabel(type),
-      ...colorsFromField(colorsFrom(data)),
-    ].join(' ').toLowerCase();
-
-    final tokens = normalized.split(RegExp(r'\s+')).where((token) => token.isNotEmpty);
-    return tokens.every(haystack.contains);
+    for (final term in terms) {
+      if (looksLikeIdPrefix(term)) {
+        if (!idMatches(term)) return false;
+      } else if (!title.contains(term)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   static String productIdFrom(Map<String, dynamic> data, String docId) {

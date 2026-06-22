@@ -233,9 +233,8 @@ class ProductCatalogService extends ChangeNotifier {
 
     final search = q.searchQuery.trim().toLowerCase();
     final terms = search.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
-    final useIdSearch = terms.length == 1 && ProductCatalog.isIdSearchTerm(terms.first);
-    final usePrefixSearch = terms.length == 1 && !useIdSearch && terms.first.length >= 2;
-    final useTokenSearch = terms.length > 1;
+    final useIdSearch = terms.length == 1 && ProductCatalog.looksLikeIdPrefix(terms.first);
+    final useTitleSearch = terms.length == 1 && !useIdSearch;
 
     if (!q.staffMode) {
       query = query.where('visibility', isEqualTo: true);
@@ -244,15 +243,14 @@ class ProductCatalogService extends ChangeNotifier {
     if (useIdSearch) {
       final prefix = terms.first;
       query = query.orderBy('searchIdPrefix').startAt([prefix]).endAt(['$prefix\uf8ff']);
-    } else if (usePrefixSearch) {
+    } else if (useTitleSearch) {
       final prefix = terms.first;
       query = query
           .orderBy('searchPrefix')
           .startAt([prefix])
           .endAt(['$prefix\uf8ff']);
-    } else if (useTokenSearch) {
-      final token = terms.reduce((a, b) => a.length >= b.length ? a : b);
-      query = query.where('searchTokens', arrayContains: token).orderBy('created_at', descending: true);
+    } else if (terms.isNotEmpty) {
+      query = query.orderBy('created_at', descending: true);
     } else {
       final seasons = ProductCatalog.seasonsForFilter(q.seasonFilter);
       if (seasons.isNotEmpty) {
@@ -300,7 +298,7 @@ class ProductCatalogService extends ChangeNotifier {
   /// Exact product ID lookup (case-insensitive) for items missing [searchIdPrefix].
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _fetchDirectIdMatch(CatalogQuery q) async {
     final term = q.searchQuery.trim();
-    if (term.isEmpty || !ProductCatalog.isIdSearchTerm(term)) return null;
+    if (term.isEmpty || !ProductCatalog.looksLikeIdPrefix(term)) return null;
 
     final col = FirebaseFirestore.instance.collection('products');
     final candidates = <String>{term, term.toUpperCase(), term.toLowerCase()};
