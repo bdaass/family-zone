@@ -144,7 +144,12 @@ class _ProductCardItemState extends State<ProductCardItem> {
                   ),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                      padding: EdgeInsets.fromLTRB(
+                        12,
+                        10,
+                        12,
+                        ProductImageSettings.catalogCardFooterBottomPadding,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -202,7 +207,8 @@ class _ProductCardItemState extends State<ProductCardItem> {
                             ),
                           ],
                           const Spacer(),
-                          if (!widget.showStaffActions && !widget.isSoldOut && widget.onAddToCart != null)
+                          if (!widget.showStaffActions && !widget.isSoldOut && widget.onAddToCart != null) ...[
+                            const SizedBox(height: ProductImageSettings.catalogAddToCartTopSpacing),
                             SizedBox(
                               width: double.infinity,
                               height: 34,
@@ -217,6 +223,7 @@ class _ProductCardItemState extends State<ProductCardItem> {
                                 child: Text(S.of('add_to_cart'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
                               ),
                             ),
+                          ],
                         ],
                       ),
                     ),
