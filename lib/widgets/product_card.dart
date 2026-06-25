@@ -112,8 +112,7 @@ class _ProductCardItemState extends State<ProductCardItem> {
               },
               borderRadius: BorderRadius.circular(20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   AspectRatio(
                     aspectRatio: ProductImageSettings.catalogImageAspectRatio,
@@ -143,83 +142,83 @@ class _ProductCardItemState extends State<ProductCardItem> {
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                            color: widget.isHidden ? AppColors.inkMuted : AppColors.ink,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        if (widget.description.isNotEmpty) ...[
-                          const SizedBox(height: 4),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                           Text(
-                            widget.description,
+                            widget.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            if (ProductCatalog.sizesDisplayLabel(widget.size).isNotEmpty)
-                              Flexible(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: AppDecor.pill(color: AppColors.cream),
-                                  child: Text(
-                                    ProductCatalog.sizesDisplayLabel(widget.size),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.ink, letterSpacing: 0.6),
-                                  ),
-                                ),
-                              ),
-                            const Spacer(),
-                            _PriceLabel(price: widget.price, soldPrice: widget.soldPrice),
-                          ],
-                        ),
-                        if (ProductCatalog.colorsFromField(widget.colors).isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          _ColorSwatches(colors: ProductCatalog.colorsFromField(widget.colors)),
-                        ],
-                        if (widget.showProductId) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            S.fmt('product_id_label', {'id': widget.productId}),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 9, color: AppColors.inkMuted),
-                          ),
-                        ],
-                        if (!widget.showStaffActions && !widget.isSoldOut && widget.onAddToCart != null) ...[
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 34,
-                            child: FilledButton(
-                              onPressed: widget.onAddToCart,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.ink,
-                                foregroundColor: AppColors.white,
-                                padding: EdgeInsets.zero,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              child: Text(S.of('add_to_cart'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: widget.isHidden ? AppColors.inkMuted : AppColors.ink,
+                              letterSpacing: -0.3,
                             ),
                           ),
+                          if (widget.description.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.description,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              if (ProductCatalog.sizesDisplayLabel(widget.size).isNotEmpty)
+                                Flexible(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: AppDecor.pill(color: AppColors.cream),
+                                    child: Text(
+                                      ProductCatalog.sizesDisplayLabel(widget.size),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.ink, letterSpacing: 0.6),
+                                    ),
+                                  ),
+                                ),
+                              const Spacer(),
+                              _PriceLabel(price: widget.price, soldPrice: widget.soldPrice),
+                            ],
+                          ),
+                          if (ProductCatalog.colorsFromField(widget.colors).isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            _ColorSwatches(colors: ProductCatalog.colorsFromField(widget.colors)),
+                          ],
+                          if (widget.showProductId) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              S.fmt('product_id_label', {'id': widget.productId}),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 9, color: AppColors.inkMuted),
+                            ),
+                          ],
+                          const Spacer(),
+                          if (!widget.showStaffActions && !widget.isSoldOut && widget.onAddToCart != null)
+                            SizedBox(
+                              width: double.infinity,
+                              height: 34,
+                              child: FilledButton(
+                                onPressed: widget.onAddToCart,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.ink,
+                                  foregroundColor: AppColors.white,
+                                  padding: EdgeInsets.zero,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: Text(S.of('add_to_cart'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                              ),
+                            ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ],
@@ -421,34 +420,7 @@ class _ColorSwatches extends StatelessWidget {
 
   const _ColorSwatches({required this.colors});
 
-  static Color _swatchFill(String name) {
-    switch (name.toLowerCase().trim()) {
-      case 'black':
-        return const Color(0xFF1A1A1A);
-      case 'white':
-        return const Color(0xFFF4F4F4);
-      case 'navy':
-        return const Color(0xFF1B2A4A);
-      case 'beige':
-        return const Color(0xFFD8CBB8);
-      case 'gray':
-      case 'grey':
-        return const Color(0xFF9E9E9E);
-      case 'red':
-        return const Color(0xFFC62828);
-      case 'pink':
-        return const Color(0xFFE891A8);
-      case 'blue':
-        return const Color(0xFF1565C0);
-      case 'green':
-        return const Color(0xFF2E7D32);
-      case 'brown':
-        return const Color(0xFF6D4C41);
-      default:
-        final hash = name.toLowerCase().codeUnits.fold(0, (sum, c) => sum + c);
-        return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.42, 0.52).toColor();
-    }
-  }
+  static Color _swatchFill(String name) => ProductCatalog.colorSwatchFill(name);
 
   @override
   Widget build(BuildContext context) {

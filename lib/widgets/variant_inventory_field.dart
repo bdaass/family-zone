@@ -156,35 +156,6 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
     _notify();
   }
 
-  static Color _swatchFill(String name) {
-    switch (name.toLowerCase().trim()) {
-      case 'black':
-        return const Color(0xFF1A1A1A);
-      case 'white':
-        return const Color(0xFFF4F4F4);
-      case 'navy':
-        return const Color(0xFF1B2A4A);
-      case 'beige':
-        return const Color(0xFFD8CBB8);
-      case 'gray':
-      case 'grey':
-        return const Color(0xFF9E9E9E);
-      case 'red':
-        return const Color(0xFFC62828);
-      case 'pink':
-        return const Color(0xFFE891A8);
-      case 'blue':
-        return const Color(0xFF1565C0);
-      case 'green':
-        return const Color(0xFF2E7D32);
-      case 'brown':
-        return const Color(0xFF6D4C41);
-      default:
-        final hash = name.toLowerCase().codeUnits.fold(0, (sum, c) => sum + c);
-        return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.42, 0.52).toColor();
-    }
-  }
-
   static Color _labelOnSwatch(Color fill) =>
       fill.computeLuminance() > 0.55 ? AppColors.ink : AppColors.white;
 
@@ -305,16 +276,69 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
               children: S.quickColorNames.map((color) => _quickColorChip(branchId, color)).toList(),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _colorControllers[branchId],
-              textCapitalization: TextCapitalization.words,
-              onChanged: (_) => setState(() => _selectedQuickColor[branchId] = null),
-              decoration: InputDecoration(
-                isDense: widget.dense,
-                labelText: S.of('color'),
-                hintText: S.of('field_color_input_hint'),
-                prefixIcon: const Icon(Icons.palette_outlined, size: 20),
-              ),
+            Text(
+              S.of('variant_custom_color_hint'),
+              style: TextStyle(fontSize: widget.dense ? 10 : 11, color: AppColors.inkMuted, height: 1.35),
+            ),
+            const SizedBox(height: 8),
+            RawAutocomplete<String>(
+              textEditingController: _colorControllers[branchId],
+              optionsBuilder: (value) {
+                final q = value.text.trim().toLowerCase();
+                if (q.isEmpty) return const Iterable<String>.empty();
+                return S.colorSuggestions.where((color) {
+                  final en = color.toLowerCase();
+                  final localized = S.colorName(color).toLowerCase();
+                  return en.contains(q) || localized.contains(q);
+                });
+              },
+              displayStringForOption: S.colorName,
+              onSelected: (color) => _selectQuickColor(branchId, color),
+              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  textCapitalization: TextCapitalization.words,
+                  onChanged: (_) => setState(() => _selectedQuickColor[branchId] = null),
+                  decoration: InputDecoration(
+                    isDense: widget.dense,
+                    labelText: S.of('color'),
+                    hintText: S.of('field_color_input_hint'),
+                    prefixIcon: const Icon(Icons.palette_outlined, size: 20),
+                  ),
+                );
+              },
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: AlignmentDirectional.topStart,
+                  child: Material(
+                    elevation: 4,
+                    borderRadius: BorderRadius.circular(10),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 220, maxWidth: 320),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (context, index) {
+                          final color = options.elementAt(index);
+                          final fill = ProductCatalog.colorSwatchFill(color);
+                          return ListTile(
+                            dense: true,
+                            leading: CircleAvatar(
+                              radius: 10,
+                              backgroundColor: fill,
+                              child: null,
+                            ),
+                            title: Text(S.colorName(color), style: const TextStyle(fontWeight: FontWeight.w600)),
+                            onTap: () => onSelected(color),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
             SizedBox(height: gap),
             TextField(
@@ -363,7 +387,7 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
   }
 
   Widget _quickColorChip(String branchId, String color) {
-    final fill = _swatchFill(color);
+    final fill = ProductCatalog.colorSwatchFill(color);
     final selected = _isQuickColorSelected(branchId, color);
     final labelColor = selected ? _labelOnSwatch(fill) : AppColors.ink;
 
@@ -414,7 +438,7 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
   }
 
   Widget _savedColorCard(String branchId, String color, Map<String, int> sizes) {
-    final fill = _swatchFill(color);
+    final fill = ProductCatalog.colorSwatchFill(color);
 
     return Container(
       width: double.infinity,

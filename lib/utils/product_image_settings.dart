@@ -12,6 +12,19 @@ class ProductImageSettings {
   /// Catalog card image width:height (1:1 — compact grid thumbnails).
   static const double catalogImageAspectRatio = 1;
 
+  /// Minimum footer space for title, sizes, colors, and the add-to-cart button.
+  static const double catalogCardFooterMinHeight = 168;
+
+  /// Grid [childAspectRatio] (width / height) sized for image + footer content.
+  static double catalogGridAspectRatio(double cardWidth) {
+    final imageHeight = cardWidth / catalogImageAspectRatio;
+    return cardWidth / (imageHeight + catalogCardFooterMinHeight);
+  }
+
+  static double catalogGridAspectRatioForLayout({required bool isWide}) {
+    return catalogGridAspectRatio(isWide ? 280 : 220);
+  }
+
   /// Decode cache size for product detail / zoom view.
   static const int detailCacheSize = 1200;
 }

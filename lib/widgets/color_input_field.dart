@@ -125,33 +125,79 @@ class _ColorInputFieldState extends State<ColorInputField> {
           }).toList(),
         ),
         SizedBox(height: gap),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _inputController,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                  isDense: widget.dense,
-                  hintText: S.of('field_color_input_hint'),
-                  border: const OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: widget.dense ? 10 : 12),
+        RawAutocomplete<String>(
+          textEditingController: _inputController,
+          optionsBuilder: (value) {
+            final q = value.text.trim().toLowerCase();
+            if (q.isEmpty) return const Iterable<String>.empty();
+            return S.colorSuggestions.where((color) {
+              final en = color.toLowerCase();
+              final localized = S.colorName(color).toLowerCase();
+              return en.contains(q) || localized.contains(q);
+            });
+          },
+          displayStringForOption: S.colorName,
+          onSelected: _addColor,
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                isDense: widget.dense,
+                hintText: S.of('field_color_input_hint'),
+                border: const OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: widget.dense ? 10 : 12),
+              ),
+              onSubmitted: (_) {
+                _addColor(controller.text);
+                onFieldSubmitted();
+              },
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: AlignmentDirectional.topStart,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(10),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 220, maxWidth: 320),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final color = options.elementAt(index);
+                      return ListTile(
+                        dense: true,
+                        leading: CircleAvatar(
+                          radius: 10,
+                          backgroundColor: ProductCatalog.colorSwatchFill(color),
+                        ),
+                        title: Text(S.colorName(color), style: const TextStyle(fontWeight: FontWeight.w600)),
+                        onTap: () => onSelected(color),
+                      );
+                    },
+                  ),
                 ),
-                onSubmitted: _addColor,
               ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: FilledButton(
+            onPressed: () => _addColor(),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.ink,
+              foregroundColor: AppColors.white,
+              padding: EdgeInsets.symmetric(horizontal: widget.dense ? 12 : 14, vertical: widget.dense ? 12 : 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: () => _addColor(),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.ink,
-                foregroundColor: AppColors.white,
-                padding: EdgeInsets.symmetric(horizontal: widget.dense ? 12 : 14, vertical: widget.dense ? 12 : 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: Text(S.of('field_color_add'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-            ),
-          ],
+            child: Text(S.of('field_color_add'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+          ),
         ),
         SizedBox(height: gap),
         Text(

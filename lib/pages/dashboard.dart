@@ -19,6 +19,7 @@ import '../theme/app_theme.dart';
 import '../utils/user_facing_error.dart';
 import '../utils/hero_slider_settings.dart';
 import '../utils/product_permissions.dart';
+import '../utils/product_image_settings.dart';
 import '../widgets/ambient_background.dart';
 import '../widgets/dashboard_hero.dart';
 import '../widgets/family_zone_brand.dart';
@@ -1180,8 +1181,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           );
         }
 
-        // width / height — higher value = shorter cards. Tuned for 4:5 image + text footer.
-        final cardAspectRatio = isWide ? 0.67 : 0.61;
+        final cardAspectRatio = ProductImageSettings.catalogGridAspectRatioForLayout(isWide: isWide);
 
         return SliverMainAxisGroup(
           slivers: [

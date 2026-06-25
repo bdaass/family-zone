@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import 'variant_inventory.dart';
@@ -535,6 +537,64 @@ class ProductCatalog {
   }
 
   static String colorDisplayName(String raw) => S.colorName(raw);
+
+  /// Swatch fill for known colors; stable hue for any custom name.
+  static Color colorSwatchFill(String name) {
+    switch (name.toLowerCase().trim()) {
+      case 'black':
+        return const Color(0xFF1A1A1A);
+      case 'white':
+        return const Color(0xFFF4F4F4);
+      case 'navy':
+        return const Color(0xFF1B2A4A);
+      case 'beige':
+        return const Color(0xFFD8CBB8);
+      case 'gray':
+      case 'grey':
+        return const Color(0xFF9E9E9E);
+      case 'red':
+        return const Color(0xFFC62828);
+      case 'pink':
+        return const Color(0xFFE891A8);
+      case 'blue':
+        return const Color(0xFF1565C0);
+      case 'green':
+        return const Color(0xFF2E7D32);
+      case 'brown':
+        return const Color(0xFF6D4C41);
+      case 'orange':
+        return const Color(0xFFE65100);
+      case 'yellow':
+        return const Color(0xFFF9A825);
+      case 'purple':
+        return const Color(0xFF6A1B9A);
+      case 'burgundy':
+        return const Color(0xFF6D1B2A);
+      case 'cream':
+        return const Color(0xFFFFF8E7);
+      case 'olive':
+        return const Color(0xFF6B7C3E);
+      case 'coral':
+        return const Color(0xFFFF7043);
+      case 'gold':
+        return const Color(0xFFD4AF37);
+      case 'ivory':
+        return const Color(0xFFFFFFF0);
+      case 'khaki':
+        return const Color(0xFFC3B091);
+      case 'maroon':
+        return const Color(0xFF800000);
+      case 'turquoise':
+        return const Color(0xFF26A69A);
+      case 'teal':
+        return const Color(0xFF00897B);
+      case 'silver':
+        return const Color(0xFFB0BEC5);
+      default:
+        final hash = name.toLowerCase().codeUnits.fold(0, (sum, c) => sum + c);
+        return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.42, 0.52).toColor();
+    }
+  }
 
   static List<String> colorsForSelection(String? raw) => colorsFromField(raw);
 
