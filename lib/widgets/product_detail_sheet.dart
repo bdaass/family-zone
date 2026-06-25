@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
+import '../models/variant_inventory.dart';
 import '../services/product_share_service.dart';
 import '../services/product_view_service.dart';
 import '../services/product_image_service.dart';
@@ -35,6 +37,7 @@ class ProductDetailSheet extends StatefulWidget {
   final bool isOld;
   final bool showOldBadge;
   final bool showBranchStock;
+  final VariantInventoryMap variantInventory;
   final Map<String, int?> branchStock;
   final VoidCallback? onFavoriteToggle;
   final VoidCallback? onAddToCart;
@@ -64,6 +67,7 @@ class ProductDetailSheet extends StatefulWidget {
     this.isOld = false,
     this.showOldBadge = false,
     this.showBranchStock = false,
+    this.variantInventory = const {},
     this.branchStock = const {},
     this.onFavoriteToggle,
     this.onAddToCart,
@@ -94,6 +98,7 @@ class ProductDetailSheet extends StatefulWidget {
     bool isOld = false,
     bool showOldBadge = false,
     bool showBranchStock = false,
+    VariantInventoryMap variantInventory = const {},
     Map<String, int?> branchStock = const {},
     VoidCallback? onFavoriteToggle,
     VoidCallback? onAddToCart,
@@ -122,6 +127,7 @@ class ProductDetailSheet extends StatefulWidget {
       isOld: isOld,
       showOldBadge: showOldBadge,
       showBranchStock: showBranchStock,
+      variantInventory: variantInventory,
       branchStock: branchStock,
       onFavoriteToggle: onFavoriteToggle,
       onAddToCart: onAddToCart,
@@ -368,16 +374,36 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         if (widget.showBranchStock) ...[
           const SizedBox(height: 20),
           Text(
-            S.of('field_branch_stock'),
+            S.of('field_variant_inventory'),
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
           ),
           const SizedBox(height: 10),
-          for (final id in ProductCatalog.branchIds) ...[
-            _detailRow(
-              ProductCatalog.branchLabel(id),
-              ProductCatalog.branchStockDisplayLabel(widget.branchStock[id]),
-            ),
-            const SizedBox(height: 8),
+          if (VariantInventory.hasAnyEntries(widget.variantInventory)) ...[
+            for (final branch in StoreConfig.locations) ...[
+              if (widget.variantInventory[branch.id]?.isNotEmpty == true) ...[
+                Text(
+                  ProductCatalog.branchLabel(branch.id),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppColors.ink),
+                ),
+                const SizedBox(height: 6),
+                for (final colorEntry in widget.variantInventory[branch.id]!.entries) ...[
+                  _detailRow(
+                    ProductCatalog.colorDisplayName(colorEntry.key),
+                    colorEntry.value.entries.map((e) => '${e.key}: ${e.value}').join(' · '),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                const SizedBox(height: 8),
+              ],
+            ],
+          ] else ...[
+            for (final id in ProductCatalog.branchIds) ...[
+              _detailRow(
+                ProductCatalog.branchLabel(id),
+                ProductCatalog.branchStockDisplayLabel(widget.branchStock[id]),
+              ),
+              const SizedBox(height: 8),
+            ],
           ],
         ],
         if (widget.showBarcodeImage && widget.barcodeImageUrl?.isNotEmpty == true) ...[

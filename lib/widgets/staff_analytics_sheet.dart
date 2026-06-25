@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
+import '../services/catalog_migration_service.dart';
 import '../services/staff_insights_service.dart';
 import '../theme/app_theme.dart';
 import 'product_image_carousel.dart';
 
 class StaffAnalyticsSheet extends StatefulWidget {
-  const StaffAnalyticsSheet({super.key});
+  final bool isAdmin;
 
-  static Future<void> show(BuildContext context) {
+  const StaffAnalyticsSheet({super.key, this.isAdmin = false});
+
+  static Future<void> show(BuildContext context, {bool isAdmin = false}) {
     return showModalBottomSheet(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => const StaffAnalyticsSheet(),
+      builder: (ctx) => StaffAnalyticsSheet(isAdmin: isAdmin),
     );
   }
 
@@ -33,6 +36,35 @@ class _StaffAnalyticsSheetState extends State<StaffAnalyticsSheet> {
 
   void _refresh() {
     setState(() => _future = StaffInsightsService.fetch());
+  }
+
+  Future<void> _resetInventory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.of('migration_reset_inventory')),
+        content: Text(S.of('migration_reset_inventory_confirm')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.of('cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.of('confirm'))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final result = await CatalogMigrationService.resetAllProductInventory();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.fmt('migration_reset_inventory_done', {'count': '${result.updated}'}))),
+      );
+      _refresh();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of('migration_reset_inventory_failed'))),
+      );
+    }
   }
 
   @override
@@ -86,6 +118,14 @@ class _StaffAnalyticsSheetState extends State<StaffAnalyticsSheet> {
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                   children: [
+                    if (widget.isAdmin) ...[
+                      OutlinedButton.icon(
+                        onPressed: _resetInventory,
+                        icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                        label: Text(S.of('migration_reset_inventory')),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     _SummaryRow(
                       label: S.of('analytics_pending_approval'),
                       value: '${data.pendingApprovalCount}',

@@ -25,6 +25,31 @@ class CatalogMigrationService {
     return (updated: updated, skipped: snap.docs.length - updated, total: snap.docs.length);
   }
 
+  /// Clears legacy size/color/stock fields so staff can re-enter per-branch variant inventory.
+  static Future<({int updated, int total})> resetAllProductInventory() async {
+    final snap = await FirebaseFirestore.instance.collection('products').get();
+    var updated = 0;
+
+    for (final doc in snap.docs) {
+      try {
+        await doc.reference.update(inventoryResetPatch());
+        updated++;
+      } catch (e, st) {
+        debugPrint('CatalogMigrationService reset inventory: ${doc.id} failed: $e\n$st');
+      }
+    }
+
+    return (updated: updated, total: snap.docs.length);
+  }
+
+  static Map<String, dynamic> inventoryResetPatch() => {
+        'size': FieldValue.delete(),
+        'colors': FieldValue.delete(),
+        'branchStock': FieldValue.delete(),
+        'variantInventory': <String, dynamic>{},
+        'stockQty': 0,
+      };
+
   static Map<String, dynamic> legacyPatchFor(Map<String, dynamic> data) => _legacyPatchFor(data);
 
   static Map<String, dynamic> _legacyPatchFor(Map<String, dynamic> data) {
@@ -37,19 +62,6 @@ class CatalogMigrationService {
       if (primary.isNotEmpty) {
         patch['imageUrls'] = [primary];
         patch['imageUrl'] = primary;
-      }
-    }
-
-    final branchStock = data['branchStock'];
-    final hasBranchStock = branchStock is Map && branchStock.isNotEmpty;
-    if (!hasBranchStock) {
-      final legacyQty = data['stockQty'];
-      if (legacyQty != null) {
-        final qty = ProductCatalog.stockQtyFrom(data);
-        if (qty != null) {
-          patch['branchStock'] = {'tripoli': qty};
-          patch['stockQty'] = qty;
-        }
       }
     }
 

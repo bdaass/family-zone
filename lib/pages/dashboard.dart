@@ -387,7 +387,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           description: ProductCatalog.descriptionFrom(data),
           size: ProductCatalog.sizeFrom(data),
           colors: ProductCatalog.colorsFrom(data),
-          branchStock: ProductCatalog.branchStockFrom(data),
+          variantInventory: ProductCatalog.variantInventoryFrom(data),
           price: ProductCatalog.priceFrom(data),
           discountPercent: ProductCatalog.discountPercentFrom(data),
           soldPrice: ProductCatalog.soldPriceFrom(data),
@@ -550,7 +550,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   void _showStaffAnalytics() {
-    StaffAnalyticsSheet.show(context);
+    StaffAnalyticsSheet.show(context, isAdmin: userRole == 'admin');
   }
 
   Future<void> _tryOpenPendingProductLink() async {
@@ -630,6 +630,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       colorField: ProductCatalog.colorsFrom(data),
       price: ProductCatalog.priceFrom(data),
       soldPrice: ProductCatalog.soldPriceFrom(data),
+      variantInventory: ProductCatalog.variantInventoryFrom(data),
     );
   }
 
@@ -660,6 +661,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       isOld: ProductCatalog.isOlderThanSixMonths(data),
       showOldBadge: userRole == 'admin',
       showBranchStock: _isStaff,
+      variantInventory: ProductCatalog.variantInventoryFrom(data),
       branchStock: ProductCatalog.branchStockFrom(data),
       onFavoriteToggle: _isClient ? () => _toggleFavorite(docId) : null,
       onAddToCart: _isStaff || (data['sold'] ?? false) ? null : () => _openAddToCart(docId, data),

@@ -2,18 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
+import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../services/product_image_service.dart';
 import '../theme/app_theme.dart';
 import 'audience_fields.dart';
-import 'branch_stock_field.dart';
-import 'color_input_field.dart';
 import 'product_images_field.dart';
-import 'size_input_field.dart';
 import 'sale_pricing_fields.dart';
 import 'staff_choice_dropdown.dart';
 import 'staff_form_section.dart';
+import 'variant_inventory_field.dart';
+import '../models/variant_inventory.dart';
 
 class EditProductSheet extends StatefulWidget {
   final String productId;
@@ -28,7 +28,7 @@ class EditProductSheet extends StatefulWidget {
   final String ageGroup;
   final String sex;
   final String type;
-  final Map<String, int?> branchStock;
+  final VariantInventoryMap variantInventory;
   final List<String> imageUrls;
   final bool hasBarcode;
   final String? barcodeImageUrl;
@@ -50,7 +50,7 @@ class EditProductSheet extends StatefulWidget {
     required this.ageGroup,
     required this.sex,
     required this.type,
-    this.branchStock = const {},
+    this.variantInventory = const {},
     this.imageUrls = const [],
     this.hasBarcode = false,
     this.barcodeImageUrl,
@@ -67,15 +67,13 @@ class _EditProductSheetState extends State<EditProductSheet> {
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
   late final TextEditingController _priceController;
-  late String _sizesEncoded;
-  late String _colorsEncoded;
+  late VariantInventoryMap _variantInventory;
   late final TextEditingController _discountPercentController;
   late final TextEditingController _salePriceController;
   late String _season;
   late String _ageGroup;
   late String _sex;
   late String _type;
-  Map<String, int?> _branchStock = {};
   List<String> _keptImageUrls = [];
   List<Uint8List> _newProductImages = [];
   List<String> _removedImageUrls = [];
@@ -85,12 +83,17 @@ class _EditProductSheetState extends State<EditProductSheet> {
   void initState() {
     super.initState();
     _keptImageUrls = List<String>.from(widget.imageUrls);
-    _branchStock = Map<String, int?>.from(widget.branchStock);
+    _variantInventory = {
+      for (final branch in StoreConfig.locations)
+        branch.id: Map<String, Map<String, int>>.from(
+          (widget.variantInventory[branch.id] ?? {}).map(
+            (color, sizes) => MapEntry(color, Map<String, int>.from(sizes)),
+          ),
+        ),
+    };
     _productIdController = TextEditingController(text: widget.productId);
     _titleController = TextEditingController(text: widget.title);
     _descController = TextEditingController(text: widget.description);
-    _sizesEncoded = widget.size;
-    _colorsEncoded = widget.colors;
     _priceController = TextEditingController(text: widget.price.toStringAsFixed(2));
     _discountPercentController = TextEditingController(
       text: widget.discountPercent?.toString() ?? '',
@@ -121,9 +124,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
     final productId = _productIdController.text.trim();
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
-    final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
-    final size = ProductCatalog.encodeSizes(sizes);
-    final colors = ProductCatalog.encodeColors(ProductCatalog.colorsFromField(_colorsEncoded));
     final price = double.tryParse(_priceController.text.trim());
     final discountText = _discountPercentController.text.trim();
     final saleText = _salePriceController.text.trim();
@@ -132,12 +132,24 @@ class _EditProductSheetState extends State<EditProductSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('product_id_invalid'))));
       return;
     }
-    if (title.isEmpty || description.isEmpty || sizes.isEmpty || price == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(sizes.isEmpty ? S.of('sizes_required') : S.of('edit_validation_required'))),
-      );
+    if (title.isEmpty || description.isEmpty || price == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('edit_validation_required'))));
       return;
     }
+
+    final inventoryError = VariantInventoryFieldValidation.validate(
+      inventory: _variantInventory,
+      requireExplicitChoice: false,
+      acknowledgedBranches: ProductCatalog.branchIds.toSet(),
+    );
+    if (inventoryError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of(inventoryError))));
+      return;
+    }
+
+    final inventorySave = ProductCatalog.resolveVariantInventoryForSave(_variantInventory);
+    final size = inventorySave.size;
+    final colors = inventorySave.colors;
     final salePricing = ProductCatalog.resolveSalePricing(
       regularPrice: price,
       salePriceText: saleText,
@@ -153,16 +165,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
     final soldPrice = salePricing.soldPrice;
     final discountPercent = salePricing.discountPercent;
 
-    final branchStockError = BranchStockFieldValidation.validate(
-      values: _branchStock,
-      requireExplicitChoice: false,
-      acknowledgedBranches: ProductCatalog.branchIds.toSet(),
-    );
-    if (branchStockError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of(branchStockError))));
-      return;
-    }
-
     final imageError = ProductImagesFieldValidation.validate(
       keptUrls: _keptImageUrls,
       newImages: _newProductImages,
@@ -174,21 +176,20 @@ class _EditProductSheetState extends State<EditProductSheet> {
       return;
     }
 
-    final branchStockSave = ProductCatalog.resolveBranchStockForSave(_branchStock);
+    final inventoryFields = ProductCatalog.variantInventoryFieldsForWrite(_variantInventory);
 
     final result = <String, dynamic>{
       'productId': productId,
       'title': title,
       'description': description,
-      'size': size,
-      'colors': colors.isEmpty ? FieldValue.delete() : colors,
-      if (branchStockSave.branchStock == null) ...{
-        'branchStock': FieldValue.delete(),
-        'stockQty': FieldValue.delete(),
-      } else ...{
-        'branchStock': branchStockSave.branchStock,
-        'stockQty': branchStockSave.stockQty,
-      },
+      'size': inventoryFields['size'],
+      if ((inventoryFields['colors'] as String).isEmpty)
+        'colors': FieldValue.delete()
+      else
+        'colors': inventoryFields['colors'],
+      'variantInventory': inventoryFields['variantInventory'],
+      'stockQty': inventoryFields['stockQty'],
+      'branchStock': inventoryFields['branchStock'],
       'price': price,
       'season': _season,
       'ageGroup': _ageGroup,
@@ -295,28 +296,13 @@ class _EditProductSheetState extends State<EditProductSheet> {
               ],
             ),
             StaffFormSection(
-              title: S.of('staff_section_variants'),
-              icon: Icons.straighten_rounded,
-              accent: AppColors.coral,
-              children: [
-                SizeInputField(
-                  initialValue: _sizesEncoded,
-                  onEncodedChanged: (value) => _sizesEncoded = value,
-                ),
-                ColorInputField(
-                  initialValue: _colorsEncoded,
-                  onEncodedChanged: (value) => _colorsEncoded = value,
-                ),
-              ],
-            ),
-            StaffFormSection(
               title: S.of('staff_section_inventory'),
               icon: Icons.storefront_outlined,
               accent: AppColors.gold,
               children: [
-                BranchStockField(
-                  initialValues: widget.branchStock,
-                  onChanged: (values) => _branchStock = values,
+                VariantInventoryField(
+                  initialInventory: _variantInventory,
+                  onChanged: (values) => _variantInventory = values,
                 ),
               ],
             ),

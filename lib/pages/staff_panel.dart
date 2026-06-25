@@ -11,15 +11,13 @@ import '../services/product_image_service.dart';
 import '../services/staff_storage_auth.dart';
 import '../services/product_write_service.dart';
 import '../widgets/audience_fields.dart';
-import '../widgets/color_input_field.dart';
-import '../widgets/branch_stock_field.dart';
 import '../widgets/product_images_field.dart';
 import '../widgets/sale_pricing_fields.dart';
-import '../widgets/size_input_field.dart';
 import '../widgets/staff_form_section.dart';
 import '../widgets/staff_choice_dropdown.dart';
+import '../widgets/variant_inventory_field.dart';
+import '../models/variant_inventory.dart';
 
-enum _FieldChoice { unset, notDetermined, specified }
 
 class StaffManagementPanel extends StatefulWidget {
   final String userRole;
@@ -34,27 +32,22 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _priceController = TextEditingController();
-  String _sizesEncoded = '';
-  String _colorsEncoded = '';
-  int _sizeInputKey = 0;
-  int _colorInputKey = 0;
   int _productImagesKey = 0;
-  int _branchStockKey = 0;
+  int _variantInventoryKey = 0;
   final _discountPercentController = TextEditingController();
   final _salePriceController = TextEditingController();
 
   List<String> _keptImageUrls = [];
   List<Uint8List> _newProductImages = [];
   Uint8List? _barcodeImage;
-  Map<String, int?> _branchStock = {};
-  Set<String> _branchStockAcknowledged = {};
+  VariantInventoryMap _variantInventory = VariantInventory.empty();
+  Set<String> _variantInventoryAcknowledged = {};
   bool _isUploading = false;
 
   String? _formSeason;
   String? _formAgeGroup;
   String? _formSex;
   String? _formType;
-  _FieldChoice _colorChoice = _FieldChoice.unset;
 
   bool get _strictForm => widget.userRole == 'employee';
 
@@ -73,12 +66,11 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     final productId = _productIdController.text.trim();
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
-    final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
     final priceParsed = double.tryParse(_priceController.text.trim());
 
     if (!ProductCatalog.isValidProductId(productId)) return 'product_id_invalid';
-    if (title.isEmpty || description.isEmpty || sizes.isEmpty || priceParsed == null) {
-      return sizes.isEmpty ? 'sizes_required' : 'staff_validation_required';
+    if (title.isEmpty || description.isEmpty || priceParsed == null) {
+      return 'staff_validation_required';
     }
 
     final imageError = ProductImagesFieldValidation.validate(
@@ -93,14 +85,14 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
       if (_formSeason == null || _formAgeGroup == null || _formSex == null || _formType == null) {
         return 'staff_validation_select_all';
       }
-      if (_colorChoice == _FieldChoice.unset) return 'staff_validation_colors';
-      final branchStockError = BranchStockFieldValidation.validate(
-        values: _branchStock,
-        requireExplicitChoice: true,
-        acknowledgedBranches: _branchStockAcknowledged,
-      );
-      if (branchStockError != null) return branchStockError;
     }
+
+    final inventoryError = VariantInventoryFieldValidation.validate(
+      inventory: _variantInventory,
+      requireExplicitChoice: _strictForm,
+      acknowledgedBranches: _variantInventoryAcknowledged,
+    );
+    if (inventoryError != null) return inventoryError;
 
     final salePricing = ProductCatalog.resolveSalePricing(
       regularPrice: priceParsed,
@@ -109,30 +101,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     );
     if (salePricing.errorKey != null) return salePricing.errorKey;
 
-    if (!_strictForm) {
-      final branchStockError = BranchStockFieldValidation.validate(
-        values: _branchStock,
-        requireExplicitChoice: false,
-        acknowledgedBranches: _branchStockAcknowledged,
-      );
-      if (branchStockError != null) return branchStockError;
-    }
-
     return null;
-  }
-
-  void _onColorsEncodedChanged(String value) {
-    _colorsEncoded = value;
-    if (!_strictForm) return;
-    setState(() {
-      if (ProductCatalog.isNotDetermined(value)) {
-        _colorChoice = _FieldChoice.notDetermined;
-      } else if (ProductCatalog.colorsFromField(value).isNotEmpty) {
-        _colorChoice = _FieldChoice.specified;
-      } else {
-        _colorChoice = _FieldChoice.unset;
-      }
-    });
   }
 
   Future<void> _submitProduct() async {
@@ -145,11 +114,11 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     final productId = _productIdController.text.trim();
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
-    final sizes = ProductCatalog.sizesFromField(_sizesEncoded);
-    final size = ProductCatalog.encodeSizes(sizes);
     final priceParsed = double.parse(_priceController.text.trim());
 
-    final colors = _resolveColorsForSave();
+    final inventorySave = ProductCatalog.resolveVariantInventoryForSave(_variantInventory);
+    final size = inventorySave.size;
+    final colors = inventorySave.colors;
     final salePricing = ProductCatalog.resolveSalePricing(
       regularPrice: priceParsed,
       salePriceText: _salePriceController.text.trim(),
@@ -157,7 +126,6 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     );
     final soldPriceParsed = salePricing.soldPrice;
     final discountPercent = salePricing.discountPercent;
-    final branchStockSave = ProductCatalog.resolveBranchStockForSave(_branchStock);
 
     setState(() => _isUploading = true);
 
@@ -204,10 +172,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         'type': type,
         'favoriteCount': 0,
         'viewCount': 0,
-        if (branchStockSave.branchStock != null) ...{
-          'branchStock': branchStockSave.branchStock,
-          'stockQty': branchStockSave.stockQty,
-        },
+        ...ProductCatalog.variantInventoryFieldsForWrite(_variantInventory),
         'visibility': isAdmin,
         'approved': isAdmin,
         'needsApproval': !isAdmin,
@@ -235,23 +200,18 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
       _titleController.clear();
       _descController.clear();
       setState(() {
-        _sizesEncoded = '';
-        _colorsEncoded = '';
-        _sizeInputKey++;
-        _colorInputKey++;
         _productImagesKey++;
-        _branchStockKey++;
+        _variantInventoryKey++;
         _keptImageUrls = [];
         _newProductImages = [];
         _barcodeImage = null;
-        _branchStock = {};
-        _branchStockAcknowledged = {};
+        _variantInventory = VariantInventory.empty();
+        _variantInventoryAcknowledged = {};
         if (_strictForm) {
           _formSeason = null;
           _formAgeGroup = null;
           _formSex = null;
           _formType = null;
-          _colorChoice = _FieldChoice.unset;
         }
       });
       _priceController.clear();
@@ -274,13 +234,6 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
-  }
-
-  String _resolveColorsForSave() {
-    if (_strictForm && _colorChoice == _FieldChoice.notDetermined) {
-      return ProductCatalog.notDetermined;
-    }
-    return ProductCatalog.encodeColors(ProductCatalog.colorsFromField(_colorsEncoded));
   }
 
   @override
@@ -379,39 +332,18 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
             ],
           ),
           StaffFormSection(
-            title: S.of('staff_section_variants'),
-            icon: Icons.straighten_rounded,
-            accent: AppColors.coral,
-            dense: true,
-            children: [
-              SizeInputField(
-                key: ValueKey('size_$_sizeInputKey'),
-                dense: true,
-                onEncodedChanged: (value) => _sizesEncoded = value,
-              ),
-              ColorInputField(
-                key: ValueKey('color_$_colorInputKey'),
-                dense: true,
-                allowNotDetermined: _strictForm,
-                notDeterminedSelected: _colorChoice == _FieldChoice.notDetermined,
-                onEncodedChanged: _onColorsEncodedChanged,
-                onNotDeterminedSelected: () => setState(() => _colorChoice = _FieldChoice.notDetermined),
-                onColorsSpecified: () => setState(() => _colorChoice = _FieldChoice.specified),
-              ),
-            ],
-          ),
-          StaffFormSection(
             title: S.of('staff_section_inventory'),
             icon: Icons.storefront_outlined,
             accent: AppColors.gold,
             dense: true,
             children: [
-              BranchStockField(
-                key: ValueKey('branch_stock_$_branchStockKey'),
+              VariantInventoryField(
+                key: ValueKey('variant_inventory_$_variantInventoryKey'),
                 dense: true,
                 requireExplicitChoice: _strictForm,
-                onChanged: (values) => _branchStock = values,
-                onAcknowledgedBranchesChanged: (ack) => setState(() => _branchStockAcknowledged = ack),
+                onChanged: (values) => _variantInventory = values,
+                onAcknowledgedBranchesChanged: (ack) =>
+                    setState(() => _variantInventoryAcknowledged = ack),
               ),
             ],
           ),

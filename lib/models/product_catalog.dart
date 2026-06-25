@@ -1,5 +1,6 @@
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
+import 'variant_inventory.dart';
 
 /// Shared product categories, filters, and field helpers.
 class ProductCatalog {
@@ -396,11 +397,27 @@ class ProductCatalog {
   }
 
   static String sizeFrom(Map<String, dynamic> data) {
-    return (data['size'] ?? '').toString();
+    final stored = (data['size'] ?? '').toString().trim();
+    if (stored.isNotEmpty) return stored;
+    final inventory = variantInventoryFrom(data);
+    if (VariantInventory.hasAnyEntries(inventory)) {
+      return encodeSizes(VariantInventory.uniqueSizes(inventory));
+    }
+    return '';
   }
 
   static String colorsFrom(Map<String, dynamic> data) {
-    return (data['colors'] ?? '').toString();
+    final stored = (data['colors'] ?? '').toString().trim();
+    if (stored.isNotEmpty) return stored;
+    final inventory = variantInventoryFrom(data);
+    if (VariantInventory.hasAnyEntries(inventory)) {
+      return encodeColors(VariantInventory.uniqueColors(inventory));
+    }
+    return '';
+  }
+
+  static VariantInventoryMap variantInventoryFrom(Map<String, dynamic> data) {
+    return VariantInventory.fromFirestore(data['variantInventory']);
   }
 
   /// Public product photos (never includes barcode).
@@ -550,6 +567,8 @@ class ProductCatalog {
   static String branchLabel(String branchId) =>
       StoreConfig.branchLabel(branchId, isArabic: S.isAr);
 
+  static int? optionalIntFrom(dynamic raw) => _optionalIntFrom(raw);
+
   static int? _optionalIntFrom(dynamic raw) {
     if (raw == null) return null;
     if (raw is int) return raw;
@@ -557,8 +576,13 @@ class ProductCatalog {
     return int.tryParse(raw.toString());
   }
 
-  /// Per-branch quantity. Missing key = not set. Legacy `stockQty` maps to Tripoli only.
+  /// Per-branch totals. Prefers `variantInventory`, then legacy `branchStock`.
   static Map<String, int?> branchStockFrom(Map<String, dynamic> data) {
+    final inventory = variantInventoryFrom(data);
+    if (VariantInventory.hasAnyEntries(inventory)) {
+      return VariantInventory.branchTotals(inventory);
+    }
+
     final result = <String, int?>{for (final id in branchIds) id: null};
     final raw = data['branchStock'];
     if (raw is Map) {
@@ -573,15 +597,49 @@ class ProductCatalog {
     return result;
   }
 
-  static int? totalStockFrom(Map<String, dynamic> data) {
-    final stored = _optionalIntFrom(data['stockQty']);
-    if (stored != null) return stored;
-    final branches = branchStockFrom(data);
-    final values = branches.values.whereType<int>();
-    if (values.isEmpty) return null;
-    return values.fold<int>(0, (sum, qty) => sum + qty);
+  static int? totalStockFrom(Map<String, dynamic> data) => stockQtyFrom(data);
+
+  static ({
+    Map<String, dynamic>? variantInventory,
+    String size,
+    String colors,
+    int? stockQty,
+  }) resolveVariantInventoryForSave(VariantInventoryMap inventory) {
+    if (!VariantInventory.hasAnyEntries(inventory)) {
+      return (variantInventory: null, size: '', colors: '', stockQty: null);
+    }
+    final sizes = VariantInventory.uniqueSizes(inventory);
+    final colors = VariantInventory.uniqueColors(inventory);
+    final firestore = VariantInventory.toFirestore(inventory);
+    return (
+      variantInventory: firestore.isEmpty ? null : firestore,
+      size: encodeSizes(sizes),
+      colors: encodeColors(colors),
+      stockQty: VariantInventory.totalQty(inventory),
+    );
   }
 
+  static Map<String, dynamic> variantInventoryFieldsForWrite(VariantInventoryMap inventory) {
+    final resolved = resolveVariantInventoryForSave(inventory);
+    if (resolved.variantInventory == null) {
+      return {
+        'variantInventory': const <String, dynamic>{},
+        'size': '',
+        'colors': '',
+        'stockQty': 0,
+        'branchStock': const <String, dynamic>{},
+      };
+    }
+    return {
+      'variantInventory': resolved.variantInventory,
+      'size': resolved.size,
+      'colors': resolved.colors,
+      'stockQty': resolved.stockQty,
+      'branchStock': const <String, dynamic>{},
+    };
+  }
+
+  /// @deprecated Use [resolveVariantInventoryForSave].
   static ({Map<String, int>? branchStock, int? stockQty}) resolveBranchStockForSave(
     Map<String, int?> stock,
   ) {
@@ -601,6 +659,11 @@ class ProductCatalog {
   }
 
   static int? stockQtyFrom(Map<String, dynamic> data) {
+    final inventory = variantInventoryFrom(data);
+    if (VariantInventory.hasAnyEntries(inventory)) {
+      return VariantInventory.totalQty(inventory);
+    }
+
     final stored = _optionalIntFrom(data['stockQty']);
     if (stored != null) return stored;
 
@@ -610,6 +673,26 @@ class ProductCatalog {
     final values = branchIds.map((id) => _optionalIntFrom(raw[id])).whereType<int>();
     if (values.isEmpty) return null;
     return values.fold<int>(0, (sum, qty) => sum + qty);
+  }
+
+  static List<String> variantInventorySummaryLines(Map<String, dynamic> data) {
+    final inventory = variantInventoryFrom(data);
+    if (!VariantInventory.hasAnyEntries(inventory)) return const [];
+
+    final lines = <String>[];
+    for (final branch in StoreConfig.locations) {
+      final colors = inventory[branch.id];
+      if (colors == null || colors.isEmpty) continue;
+      final parts = <String>[];
+      for (final colorEntry in colors.entries) {
+        final sizeParts = colorEntry.value.entries
+            .map((e) => '${e.key}: ${e.value}')
+            .join(', ');
+        parts.add('${colorDisplayName(colorEntry.key)} ($sizeParts)');
+      }
+      lines.add('${branchLabel(branch.id)} — ${parts.join(' · ')}');
+    }
+    return lines;
   }
 
   static bool isLowStockAlert(int? stockQty, {bool sold = false}) {
@@ -793,6 +876,10 @@ class ProductCatalog {
     final stock = stockQtyFrom(data);
     if (stock != null) {
       lines.add(_approvalSetLine('field_branch_stock', '$stock'));
+    }
+    final variantLines = variantInventorySummaryLines(data);
+    for (final line in variantLines) {
+      lines.add(line);
     }
     final photos = productImageUrlsFrom(data).length;
     if (photos > 0) {
