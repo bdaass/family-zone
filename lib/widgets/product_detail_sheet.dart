@@ -389,7 +389,14 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 for (final colorEntry in widget.variantInventory[branch.id]!.entries) ...[
                   _detailRow(
                     ProductCatalog.colorDisplayName(colorEntry.key),
-                    colorEntry.value.entries.map((e) => '${e.key}: ${e.value}').join(' · '),
+                    colorEntry.value.entries
+                        .map(
+                          (e) => S.fmt('variant_size_stock_line', {
+                            'size': e.key,
+                            'count': '${e.value}',
+                          }),
+                        )
+                        .join(' · '),
                   ),
                   const SizedBox(height: 6),
                 ],

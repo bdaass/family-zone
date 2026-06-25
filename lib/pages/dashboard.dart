@@ -1180,7 +1180,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           );
         }
 
-        final cardAspectRatio = isWide ? 0.58 : 0.42;
+        // width / height — higher value = shorter cards. Tuned for 4:5 image + text footer.
+        final cardAspectRatio = isWide ? 0.67 : 0.61;
 
         return SliverMainAxisGroup(
           slivers: [

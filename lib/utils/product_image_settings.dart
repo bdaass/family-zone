@@ -9,6 +9,9 @@ class ProductImageSettings {
   /// Decode cache size for grid thumbnails (260px cell × 2 for retina).
   static const int displayCacheSize = 520;
 
+  /// Catalog card image width:height (1:1 — compact grid thumbnails).
+  static const double catalogImageAspectRatio = 1;
+
   /// Decode cache size for product detail / zoom view.
   static const int detailCacheSize = 1200;
 }

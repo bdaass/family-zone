@@ -228,9 +228,7 @@ class _AddToCartSheetState extends State<AddToCartSheet> {
                     : null;
                 final outOfStock = variantQty == 0;
                 return ChoiceChip(
-                  label: Text(
-                    variantQty != null && variantQty > 0 ? '$size ($variantQty)' : size,
-                  ),
+                  label: Text(size),
                   selected: selected,
                   onSelected: outOfStock ? null : (_) => _onSizeSelected(size),
                   selectedColor: AppColors.ink,
@@ -280,13 +278,6 @@ class _AddToCartSheetState extends State<AddToCartSheet> {
                   Icons.add,
                   _quantity < _maxQuantity ? () => setState(() => _quantity++) : null,
                 ),
-                if (_usesVariantInventory) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    S.fmt('variant_qty_label', {'count': '$_maxQuantity'}),
-                    style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
-                  ),
-                ],
                 const Spacer(),
                 Text(
                   S.fmt('total_label', {'amount': (_unitPrice * _quantity).toStringAsFixed(2)}),

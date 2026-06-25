@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
+import '../utils/product_image_settings.dart';
 import '../theme/app_theme.dart';
 import 'product_image_carousel.dart';
 
@@ -112,8 +113,10 @@ class _ProductCardItemState extends State<ProductCardItem> {
               borderRadius: BorderRadius.circular(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
+                  AspectRatio(
+                    aspectRatio: ProductImageSettings.catalogImageAspectRatio,
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
