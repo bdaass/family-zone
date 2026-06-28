@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/product_catalog.dart';
 import '../utils/product_permissions.dart';
+import '../utils/web_platform.dart';
 
 /// Query parameters for a paginated catalog fetch.
 class CatalogQuery {
@@ -61,7 +62,7 @@ class ProductCatalogService extends ChangeNotifier {
   ProductCatalogService._();
   static final ProductCatalogService instance = ProductCatalogService._();
 
-  static const pageSize = 48;
+  static int get pageSize => WebPlatform.isMobileWeb ? 16 : 48;
   static const _maxBackfillRounds = 5;
 
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _docs = [];
@@ -91,10 +92,20 @@ class ProductCatalogService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      var batch = await _fetchBatch(startAfter: null);
+      final direct = await _fetchDirectIdMatch(query);
+
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> batch;
+      try {
+        batch = await _fetchBatch(startAfter: null);
+      } on FirebaseException catch (e) {
+        if (direct == null || !_passesClientFilters(query, direct)) rethrow;
+        debugPrint(
+          'ProductCatalogService: indexed search failed, using direct ID match only: $e',
+        );
+        batch = [];
+      }
       if (generation != _fetchGeneration) return;
 
-      final direct = await _fetchDirectIdMatch(query);
       if (direct != null && _passesClientFilters(query, direct)) {
         final existing = batch.map((d) => d.id).toSet();
         if (!existing.contains(direct.id)) {
@@ -188,7 +199,7 @@ class ProductCatalogService extends ChangeNotifier {
     try {
       return await _buildFirestoreQuery(q: q, startAfter: startAfter).get();
     } on FirebaseException catch (e) {
-      if (e.code != 'failed-precondition' || _usesSimpleBrowse(q)) rethrow;
+      if (e.code != 'failed-precondition') rethrow;
       debugPrint('ProductCatalogService: missing Firestore index, using simple browse query.');
       return _simpleBrowseQuery(q: q, startAfter: startAfter).get();
     }
@@ -304,10 +315,8 @@ class ProductCatalogService extends ChangeNotifier {
     final candidates = <String>{term, term.toUpperCase(), term.toLowerCase()};
 
     for (final id in candidates) {
-      final snap = await col.doc(id).get();
-      if (snap.exists && snap.data() != null) {
-        return snap as QueryDocumentSnapshot<Map<String, dynamic>>;
-      }
+      final qs = await col.where(FieldPath.documentId, isEqualTo: id).limit(1).get();
+      if (qs.docs.isNotEmpty) return qs.docs.first;
     }
 
     for (final id in candidates) {

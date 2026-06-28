@@ -9,6 +9,7 @@ import '../services/locale_service.dart';
 import '../services/top_slider_service.dart' show TopSliderService;
 import '../theme/app_theme.dart';
 import '../utils/hero_slider_settings.dart';
+import '../utils/web_platform.dart';
 import 'family_zone_brand.dart';
 import 'hero_slider_manage_sheet.dart';
 
@@ -104,6 +105,8 @@ class _DashboardHeroState extends State<DashboardHero> {
   void _restartAutoPlay() {
     _autoTimer?.cancel();
     if (!mounted || _slides.length < 2) return;
+    // Auto-advance is heavy on iPhone Safari; let shoppers swipe manually.
+    if (WebPlatform.isMobileWeb) return;
 
     _autoTimer = Timer.periodic(_autoInterval, (_) {
       if (!mounted || !_pageController.hasClients || _slides.isEmpty) return;
@@ -564,7 +567,7 @@ class _SlidePageState extends State<_SlidePage> with SingleTickerProviderStateMi
       child: Center(child: Icon(Icons.image_outlined, color: AppColors.white.withValues(alpha: 0.6), size: 40)),
     );
 
-    final cacheWidth = kIsWeb ? null : HeroSliderSettings.uploadMaxWidth(widget.sliderSize);
+    final cacheWidth = HeroSliderSettings.uploadMaxWidth(widget.sliderSize);
 
     return SizedBox.expand(
       child: Image.network(

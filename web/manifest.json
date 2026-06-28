@@ -1,11 +1,11 @@
 {
-    "name": "Family Zone",
-    "short_name": "Family Zone",
+    "name": "family_zone",
+    "short_name": "family_zone",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#F8F5F0",
-    "theme_color": "#E85D4A",
-    "description": "Family Zone — fashion for the whole family.",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "A new Flutter project.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

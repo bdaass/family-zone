@@ -1,3 +1,5 @@
+import 'web_platform.dart';
+
 /// Shared settings for product image upload and display.
 class ProductImageSettings {
   /// Max width/height stored in Firebase Storage (keeps files small).
@@ -7,7 +9,8 @@ class ProductImageSettings {
   static const int uploadQuality = 75;
 
   /// Decode cache size for grid thumbnails (260px cell × 2 for retina).
-  static const int displayCacheSize = 520;
+  static int get displayCacheSize =>
+      WebPlatform.isMobileWeb ? 320 : 520;
 
   /// Catalog card image width:height (1:1 — compact grid thumbnails).
   static const double catalogImageAspectRatio = 1;

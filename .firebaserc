@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "family-zone-2026"
+  },
+  "targets": {
+    "family-zone-2026": {
+      "hosting": {
+        "default": [
+          "family-zone-2026"
+        ]
+      }
+    }
   }
 }

@@ -20,6 +20,7 @@ import '../utils/user_facing_error.dart';
 import '../utils/hero_slider_settings.dart';
 import '../utils/product_permissions.dart';
 import '../utils/product_image_settings.dart';
+import '../utils/web_platform.dart';
 import '../widgets/ambient_background.dart';
 import '../widgets/dashboard_hero.dart';
 import '../widgets/family_zone_brand.dart';
@@ -171,7 +172,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void _onScroll() {
     if (!_scrollController.hasClients || !_catalog.hasMore || _catalog.isLoadingMore) return;
     final position = _scrollController.position;
-    if (position.pixels >= position.maxScrollExtent - 480) {
+    final prefetch = WebPlatform.isMobileWeb ? 240.0 : 480.0;
+    if (position.pixels >= position.maxScrollExtent - prefetch) {
       _loadMoreProducts();
     }
   }
