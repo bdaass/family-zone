@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'product_catalog.dart';
 
-/// Client-side catalog sort — applied to loaded pages (pagination keeps Firestore order).
+/// Client-side catalog sort — price sort refines within a page; other sorts use Firestore order.
 enum CatalogSort {
   newest,
   priceLowHigh,

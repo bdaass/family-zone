@@ -37,6 +37,7 @@ import '../services/order_service.dart';
 import '../services/product_write_service.dart';
 import '../widgets/sidebar_content.dart';
 import '../widgets/product_card.dart';
+import '../widgets/catalog_pagination_bar.dart';
 import '../widgets/catalog_sort_bar.dart';
 import '../widgets/approval_queue_sheet.dart';
 import '../widgets/staff_analytics_sheet.dart';
@@ -66,6 +67,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   bool _pendingLinkHandled = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSubscription;
   Timer? _searchDebounce;
+  Timer? _catalogDebounce;
   bool _authResolved = false;
   int _heroRefreshToken = 0;
   bool _staffAddPanelOpen = false;
@@ -98,7 +100,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _entranceController.forward();
     CartService.instance.addListener(_onCartChanged);
     _catalog.addListener(_onCatalogChanged);
-    _scrollController.addListener(_onScroll);
     if (kIsWeb) {
       final linkId = Uri.base.queryParameters['p']?.trim();
       if (linkId != null && linkId.isNotEmpty) _pendingProductLink = linkId;
@@ -117,9 +118,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     CartService.instance.removeListener(_onCartChanged);
     _catalog.removeListener(_onCatalogChanged);
     _searchDebounce?.cancel();
+    _catalogDebounce?.cancel();
     _userSubscription?.cancel();
     _entranceController.dispose();
-    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -135,6 +136,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         searchQuery: _searchController.text,
         priceMin: priceMin,
         priceMax: priceMax,
+        sort: catalogSort,
       );
 
   void _onCatalogChanged() {
@@ -143,7 +145,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _reloadCatalog();
     } else {
       setState(() {});
-      if (!_catalog.isLoadingInitial) {
+      if (!_catalog.isLoading) {
         _tryOpenPendingProductLink();
       }
     }
@@ -159,23 +161,33 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     await _catalog.fetchFirst(_catalogQuery);
   }
 
+  void _scheduleCatalogReload({bool immediate = false}) {
+    _catalogDebounce?.cancel();
+    if (immediate || !WebPlatform.isMobileWeb) {
+      _reloadCatalog();
+      return;
+    }
+    _catalogDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) _reloadCatalog();
+    });
+  }
+
   Future<void> _refreshDashboard() async {
-    TopSliderService.invalidateCache();
-    if (mounted) setState(() => _heroRefreshToken++);
+    if (WebPlatform.showDashboardHero) {
+      TopSliderService.invalidateCache();
+      if (mounted) setState(() => _heroRefreshToken++);
+    }
     await _reloadCatalog();
   }
 
-  Future<void> _loadMoreProducts() async {
-    await _catalog.fetchMore();
-  }
-
-  void _onScroll() {
-    if (!_scrollController.hasClients || !_catalog.hasMore || _catalog.isLoadingMore) return;
-    final position = _scrollController.position;
-    final prefetch = WebPlatform.isMobileWeb ? 240.0 : 480.0;
-    if (position.pixels >= position.maxScrollExtent - prefetch) {
-      _loadMoreProducts();
-    }
+  Future<void> _goToPage(int page) async {
+    if (_catalog.isLoading) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+    await _catalog.loadPage(_catalogQuery, page);
   }
 
   void _invalidateCatalog() {
@@ -186,7 +198,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     setState(() {});
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (mounted) _reloadCatalog();
+      if (mounted) _scheduleCatalogReload();
     });
   }
 
@@ -291,7 +303,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       priceMin = ProductCatalog.priceFilterFloor;
       priceMax = ProductCatalog.priceFilterCeiling;
     });
-    _reloadCatalog();
+    _scheduleCatalogReload(immediate: true);
   }
 
   int get _activeFilterCount {
@@ -329,7 +341,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             priceMin = minPrice;
             priceMax = maxPrice;
           });
-          _reloadCatalog();
+          _scheduleCatalogReload(immediate: true);
         },
       ),
     );
@@ -536,7 +548,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         saleOnly = false;
       }
     });
-    _reloadCatalog();
+    _scheduleCatalogReload(immediate: true);
     _scrollToCollection();
   }
 
@@ -570,7 +582,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       }
     }
 
-    if (_catalog.isLoadingInitial || _catalog.isLoadingMore) return;
+    if (_catalog.isLoading) return;
 
     try {
       var doc = await FirebaseFirestore.instance.collection('products').doc(targetId).get();
@@ -712,7 +724,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       drawer: showDrawer ? _buildDrawer(user) : null,
       body: Stack(
         children: [
-          const AmbientBackground(),
+          if (!WebPlatform.isMobileWeb) const AmbientBackground(),
           Row(
             children: [
               if (useInlineSidebar) _buildSidebar(user),
@@ -732,6 +744,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       onRefresh: _refreshDashboard,
       child: CustomScrollView(
         controller: _scrollController,
+        cacheExtent: WebPlatform.isMobileWeb ? 120 : 250,
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         slivers: [
           if (_isStaff)
@@ -760,16 +773,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 ],
               ),
             ),
-          SliverToBoxAdapter(
-            child: DashboardHero(
-              key: ValueKey(LocaleService.instance.languageCode),
-              isWide: isWide,
-              refreshToken: _heroRefreshToken,
-              canManageSlides: _isStaff,
-              onContactTap: _contactViaWhatsApp,
-              onCategoryTap: _applyHeroFilter,
+          if (WebPlatform.showDashboardHero)
+            SliverToBoxAdapter(
+              child: DashboardHero(
+                key: ValueKey(LocaleService.instance.languageCode),
+                isWide: isWide,
+                refreshToken: _heroRefreshToken,
+                canManageSlides: _isStaff,
+                onContactTap: _contactViaWhatsApp,
+                onCategoryTap: _applyHeroFilter,
+              ),
             ),
-          ),
           SliverToBoxAdapter(
             key: _collectionKey,
             child: _buildCollectionHeader(isWide, useInlineSidebar),
@@ -831,23 +845,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       priceMax: priceMax,
       onSeasonChanged: (v) {
         setState(() => selectedSeason = v);
-        _reloadCatalog();
+        _scheduleCatalogReload();
       },
       onAgeGroupChanged: (v) {
         setState(() => selectedAgeGroup = v);
-        _reloadCatalog();
+        _scheduleCatalogReload();
       },
       onSexChanged: (v) {
         setState(() => selectedSex = v);
-        _reloadCatalog();
+        _scheduleCatalogReload();
       },
       onCategoryChanged: (v) {
         setState(() => selectedCategory = v);
-        _reloadCatalog();
+        _scheduleCatalogReload();
       },
       onSaleOnlyChanged: (v) {
         setState(() => saleOnly = v);
-        _reloadCatalog();
+        _scheduleCatalogReload();
       },
       onPriceRangeChanged: (values) {
         setState(() {
@@ -855,7 +869,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           priceMax = values.end;
         });
       },
-      onPriceRangeCommit: (_) => _reloadCatalog(),
+      onPriceRangeCommit: (_) => _scheduleCatalogReload(),
       onClearFilters: _resetFilters,
       onStaffPanelTap: onStaffTap,
       isLoggedIn: user != null,
@@ -1098,7 +1112,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           CatalogSortBar(
             compact: !isWide,
             selected: catalogSort,
-            onChanged: (value) => setState(() => catalogSort = value),
+            onChanged: (value) {
+              setState(() => catalogSort = value);
+              _scheduleCatalogReload();
+            },
           ),
         ],
       ),
@@ -1146,7 +1163,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       );
     }
 
-    final filteredDocs = sortCatalogDocs(_catalog.docs, catalogSort);
+    final filteredDocs = catalogSort == CatalogSort.priceLowHigh
+        ? sortCatalogDocs(_catalog.docs, catalogSort)
+        : _catalog.docs;
 
         if (filteredDocs.isEmpty) {
           final hasSearch = _searchController.text.trim().isNotEmpty;
@@ -1202,6 +1221,38 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     final data = doc.data();
                     final imageUrls = ProductCatalog.productImageUrlsFrom(data);
                     final imageUrl = ProductCatalog.primaryImageUrl(data);
+                    final card = ProductCardItem(
+                      key: ValueKey(doc.id),
+                      imageUrl: imageUrl,
+                      imageUrls: imageUrls,
+                      title: ProductCatalog.titleFrom(data),
+                      description: ProductCatalog.descriptionFrom(data),
+                      size: ProductCatalog.sizeFrom(data),
+                      colors: ProductCatalog.colorsFrom(data),
+                      productId: ProductCatalog.productIdFrom(data, doc.id),
+                      price: ProductCatalog.priceFrom(data),
+                      soldPrice: ProductCatalog.soldPriceFrom(data),
+                      favoriteCount: ProductCatalog.favoriteCountFrom(data),
+                      isFavorited: _likedProductIds.contains(doc.id),
+                      onTap: () => _openProductDetail(doc.id, data),
+                      onFavoriteToggle: () => _toggleFavorite(doc.id),
+                      showProductId: _isStaff,
+                      isSoldOut: data['sold'] ?? false,
+                      isHidden: !ProductPermissions.isVisible(data),
+                      isPendingApproval: ProductPermissions.isPendingApproval(data),
+                      isNew: ProductCatalog.isNewlyAdded(data),
+                      isOld: ProductCatalog.isOlderThanSixMonths(data),
+                      showOldBadge: userRole == 'admin',
+                      showStaffActions: _isStaff,
+                      canDelete: ProductPermissions.canDelete(userRole),
+                      canEdit: ProductPermissions.canEdit(userRole),
+                      canToggleVisibility: ProductPermissions.canToggleVisibility(userRole),
+                      onDelete: () => _deleteProduct(doc.id, data),
+                      onEdit: () => _editProduct(doc.id, data),
+                      onToggleVisibility: () => _toggleVisibility(doc.id, data),
+                      onAddToCart: _isStaff ? null : () => _openAddToCart(doc.id, data),
+                    );
+                    if (WebPlatform.isMobileWeb) return card;
                     return TweenAnimationBuilder<double>(
                       key: ValueKey('${doc.id}-$catalogSort-$selectedSeason-$selectedAgeGroup-$selectedSex-$selectedCategory-$saleOnly-$priceMin-$priceMax-${_searchController.text}'),
                       duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
@@ -1222,55 +1273,21 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           ),
                         );
                       },
-                      child: ProductCardItem(
-                        imageUrl: imageUrl,
-                        imageUrls: imageUrls,
-                        title: ProductCatalog.titleFrom(data),
-                        description: ProductCatalog.descriptionFrom(data),
-                        size: ProductCatalog.sizeFrom(data),
-                        colors: ProductCatalog.colorsFrom(data),
-                        productId: ProductCatalog.productIdFrom(data, doc.id),
-                        price: ProductCatalog.priceFrom(data),
-                        soldPrice: ProductCatalog.soldPriceFrom(data),
-                        favoriteCount: ProductCatalog.favoriteCountFrom(data),
-                        isFavorited: _likedProductIds.contains(doc.id),
-                        onTap: () => _openProductDetail(doc.id, data),
-                        onFavoriteToggle: () => _toggleFavorite(doc.id),
-                        showProductId: _isStaff,
-                        isSoldOut: data['sold'] ?? false,
-                        isHidden: !ProductPermissions.isVisible(data),
-                        isPendingApproval: ProductPermissions.isPendingApproval(data),
-                        isNew: ProductCatalog.isNewlyAdded(data),
-                        isOld: ProductCatalog.isOlderThanSixMonths(data),
-                        showOldBadge: userRole == 'admin',
-                        showStaffActions: _isStaff,
-                        canDelete: ProductPermissions.canDelete(userRole),
-                        canEdit: ProductPermissions.canEdit(userRole),
-                        canToggleVisibility: ProductPermissions.canToggleVisibility(userRole),
-                        onDelete: () => _deleteProduct(doc.id, data),
-                        onEdit: () => _editProduct(doc.id, data),
-                        onToggleVisibility: () => _toggleVisibility(doc.id, data),
-                        onAddToCart: _isStaff ? null : () => _openAddToCart(doc.id, data),
-                      ),
+                      child: card,
                     );
                   },
                   childCount: filteredDocs.length,
                 ),
               ),
             ),
-            if (_catalog.isLoadingMore)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.coral),
-                    ),
-                  ),
-                ),
+            SliverToBoxAdapter(
+              child: CatalogPaginationBar(
+                currentPage: _catalog.currentPage,
+                totalPages: _catalog.totalPages,
+                isLoading: _catalog.isLoading,
+                onPageSelected: _goToPage,
               ),
+            ),
           ],
         );
   }

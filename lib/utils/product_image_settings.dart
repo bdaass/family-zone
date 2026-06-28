@@ -8,9 +8,12 @@ class ProductImageSettings {
   /// JPEG quality for uploaded product photos (0–100).
   static const int uploadQuality = 75;
 
-  /// Decode cache size for grid thumbnails (260px cell × 2 for retina).
-  static int get displayCacheSize =>
-      WebPlatform.isMobileWeb ? 320 : 520;
+  /// Decode cache size for grid thumbnails (cell width × ~2 for retina).
+  static int get displayCacheSize {
+    if (WebPlatform.isIOSWeb) return 280;
+    if (WebPlatform.isMobileWeb) return 360;
+    return 520;
+  }
 
   /// Catalog card image width:height (1:1 — compact grid thumbnails).
   static const double catalogImageAspectRatio = 1;
@@ -31,9 +34,12 @@ class ProductImageSettings {
   }
 
   static double catalogGridAspectRatioForLayout({required bool isWide}) {
-    return catalogGridAspectRatio(isWide ? 280 : 220);
+    // Cells are often narrower than maxCrossAxisExtent on small screens — size for a
+    // conservative minimum width so the card footer (title, sizes, add-to-cart) fits.
+    final minCardWidth = isWide ? 200.0 : 160.0;
+    return catalogGridAspectRatio(minCardWidth);
   }
 
   /// Decode cache size for product detail / zoom view.
-  static const int detailCacheSize = 1200;
+  static int get detailCacheSize => WebPlatform.isMobileWeb ? 900 : 1200;
 }
