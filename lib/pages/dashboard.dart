@@ -1163,9 +1163,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       );
     }
 
-    final filteredDocs = catalogSort == CatalogSort.priceLowHigh
-        ? sortCatalogDocs(_catalog.docs, catalogSort)
-        : _catalog.docs;
+    final filteredDocs = _catalog.docs;
 
         if (filteredDocs.isEmpty) {
           final hasSearch = _searchController.text.trim().isNotEmpty;

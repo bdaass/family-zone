@@ -872,6 +872,12 @@ class ProductCatalog {
     return soldPrice != null && soldPrice > 0 && soldPrice < price;
   }
 
+  /// Price shoppers pay (sale price when on sale). Stored as [effectivePrice] for sorting.
+  static double computeEffectivePrice(double price, double? soldPrice) {
+    if (soldPrice != null && soldPrice > 0 && soldPrice < price) return soldPrice;
+    return price;
+  }
+
   static const newProductMaxAgeDays = 10;
   static const oldProductMonths = 6;
 
@@ -1040,6 +1046,25 @@ class ProductCatalog {
     return [filterLabel.toLowerCase(), 'all_seasons', 'all seasons'];
   }
 
+  /// Stored [ageGroup] value for a filter chip, or null when showing all ages.
+  static String? firestoreAgeGroupForFilter(String filterLabel) {
+    return switch (filterLabel) {
+      'Kids' => 'kids',
+      'Baby' => 'baby',
+      'Adult' => 'adult',
+      _ => null,
+    };
+  }
+
+  /// Stored [sex] value for a filter chip, or null when showing all genders.
+  static String? firestoreSexForFilter(String filterLabel) {
+    return switch (filterLabel) {
+      'Male' => 'male',
+      'Female' => 'female',
+      _ => null,
+    };
+  }
+
   /// Lowercase tokens for Firestore `arrayContains` search (max 30).
   static List<String> buildSearchTokens({
     required String title,
@@ -1109,6 +1134,7 @@ class ProductCatalog {
         type: type,
       ),
       'onSale': computeOnSale(price, soldPrice),
+      'effectivePrice': computeEffectivePrice(price, soldPrice),
     };
   }
 }

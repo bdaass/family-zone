@@ -25,6 +25,30 @@ class CatalogMigrationService {
     return (updated: updated, skipped: snap.docs.length - updated, total: snap.docs.length);
   }
 
+  /// Writes [effectivePrice] on every product so price-ascending catalog sort works.
+  static Future<({int updated, int total})> backfillEffectivePrices() async {
+    final snap = await FirebaseFirestore.instance.collection('products').get();
+    var updated = 0;
+
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final expected = ProductCatalog.effectivePrice(data);
+      final current = data['effectivePrice'];
+      final needsUpdate = current == null ||
+          (current is num && (current.toDouble() - expected).abs() > 0.001);
+      if (!needsUpdate) continue;
+
+      try {
+        await doc.reference.update({'effectivePrice': expected});
+        updated++;
+      } catch (e, st) {
+        debugPrint('CatalogMigrationService backfillEffectivePrices: ${doc.id} failed: $e\n$st');
+      }
+    }
+
+    return (updated: updated, total: snap.docs.length);
+  }
+
   /// Clears legacy size/color/stock fields so staff can re-enter per-branch variant inventory.
   static Future<({int updated, int total})> resetAllProductInventory() async {
     final snap = await FirebaseFirestore.instance.collection('products').get();
@@ -63,6 +87,12 @@ class CatalogMigrationService {
         patch['imageUrls'] = [primary];
         patch['imageUrl'] = primary;
       }
+    }
+
+    final expected = ProductCatalog.effectivePrice(data);
+    final current = data['effectivePrice'];
+    if (current == null || (current is num && (current.toDouble() - expected).abs() > 0.001)) {
+      patch['effectivePrice'] = expected;
     }
 
     return patch;

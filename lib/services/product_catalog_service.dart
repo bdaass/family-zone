@@ -5,6 +5,7 @@ import '../models/catalog_sort.dart';
 import '../models/product_catalog.dart';
 import '../utils/product_permissions.dart';
 import '../utils/web_platform.dart';
+import 'catalog_migration_service.dart';
 
 /// Query parameters for a paginated catalog fetch.
 class CatalogQuery {
@@ -69,6 +70,8 @@ class ProductCatalogService extends ChangeNotifier {
 
   static const int pageSize = 18;
   static const _maxBackfillRounds = 5;
+  static bool _priceBackfillDone = false;
+  bool? _sortUsesBrowseFallback;
 
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _docs = [];
   int _currentPage = 1;
@@ -109,11 +112,17 @@ class ProductCatalogService extends ChangeNotifier {
     _cursorQueryKey = _queryCacheKey(query);
     _totalCount = null;
     _currentPage = 1;
+    if (query.sort == CatalogSort.priceLowHigh) {
+      await _ensurePriceSortReady();
+    }
     await loadPage(query, 1);
   }
 
   Future<void> loadPage(CatalogQuery query, int page) async {
     final targetPage = page < 1 ? 1 : page;
+    if (query.sort == CatalogSort.priceLowHigh && targetPage == 1) {
+      await _ensurePriceSortReady();
+    }
     final generation = ++_fetchGeneration;
     final key = _queryCacheKey(query);
 
@@ -121,6 +130,7 @@ class ProductCatalogService extends ChangeNotifier {
       _pageEndCursors.clear();
       _cursorQueryKey = key;
       _totalCount = null;
+      _sortUsesBrowseFallback = null;
     }
 
     _query = query;
@@ -183,6 +193,7 @@ class ProductCatalogService extends ChangeNotifier {
     _hasNextPage = false;
     _error = null;
     _query = null;
+    _sortUsesBrowseFallback = null;
     notifyListeners();
   }
 
@@ -241,8 +252,9 @@ class ProductCatalogService extends ChangeNotifier {
     var rounds = 0;
     var serverHasMore = true;
     final needsClientPass = _needsClientSidePass(query);
+    final maxRounds = _sortUsesBrowseFallback == true ? 15 : _maxBackfillRounds;
 
-    while (results.length < pageSize && rounds < _maxBackfillRounds && serverHasMore) {
+    while (results.length < pageSize && rounds < maxRounds && serverHasMore) {
       rounds++;
       final snap = await _runQuery(q: query, startAfter: cursor);
       if (snap.docs.isEmpty) break;
@@ -260,7 +272,21 @@ class ProductCatalogService extends ChangeNotifier {
     return results;
   }
 
+  Future<void> _ensurePriceSortReady() async {
+    if (_priceBackfillDone) return;
+    _priceBackfillDone = true;
+    try {
+      final result = await CatalogMigrationService.backfillEffectivePrices();
+      if (result.updated > 0) {
+        debugPrint('ProductCatalogService: backfilled effectivePrice on ${result.updated} products.');
+      }
+    } catch (e, st) {
+      debugPrint('ProductCatalogService: effectivePrice backfill failed: $e\n$st');
+    }
+  }
+
   bool _needsClientSidePass(CatalogQuery q) {
+    if (_sortUsesBrowseFallback == true) return true;
     if (ProductCatalog.hasActivePriceFilter(q.priceMin, q.priceMax)) return true;
     if (q.searchQuery.trim().isNotEmpty) return true;
     return false;
@@ -269,13 +295,40 @@ class ProductCatalogService extends ChangeNotifier {
   Future<QuerySnapshot<Map<String, dynamic>>> _runQuery({
     required CatalogQuery q,
     required QueryDocumentSnapshot<Map<String, dynamic>>? startAfter,
+    CatalogSort? sortOverride,
   }) async {
+    final sort = sortOverride ?? q.sort;
+    if (_sortUsesBrowseFallback == true && sortOverride == null) {
+      return _simpleBrowseQuery(q: q, startAfter: startAfter, sortOverride: sort)
+          .limit(pageSize)
+          .get();
+    }
+
     try {
-      return await _buildFirestoreQuery(q: q, startAfter: startAfter).limit(pageSize).get();
+      return await _buildFirestoreQuery(q: q, startAfter: startAfter, sortOverride: sortOverride)
+          .limit(pageSize)
+          .get();
     } on FirebaseException catch (e) {
       if (e.code != 'failed-precondition') rethrow;
-      debugPrint('ProductCatalogService: missing Firestore index, using simple browse query.');
-      return _simpleBrowseQuery(q: q, startAfter: startAfter).limit(pageSize).get();
+      if (_usesSimpleBrowse(q) && sortOverride == null) {
+        debugPrint('ProductCatalogService: missing Firestore index, using simple browse query.');
+        return _simpleBrowseQuery(q: q, startAfter: startAfter).limit(pageSize).get();
+      }
+      if (sortOverride != null) {
+        rethrow;
+      }
+      if (!_usesSimpleBrowse(q)) {
+        debugPrint(
+          'ProductCatalogService: missing index for ${q.sort.name} with filters — using browse + client filters. '
+          'Deploy firestore.indexes.json for lower read cost. ${e.message}',
+        );
+        _sortUsesBrowseFallback = true;
+        return _simpleBrowseQuery(q: q, startAfter: startAfter, sortOverride: sort)
+            .limit(pageSize)
+            .get();
+      }
+      debugPrint('ProductCatalogService: missing index for ${q.sort.name}. ${e.message}');
+      rethrow;
     }
   }
 
@@ -328,12 +381,13 @@ class ProductCatalogService extends ChangeNotifier {
   Query<Map<String, dynamic>> _simpleBrowseQuery({
     required CatalogQuery q,
     required QueryDocumentSnapshot<Map<String, dynamic>>? startAfter,
+    CatalogSort? sortOverride,
   }) {
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection('products');
     if (!q.staffMode) {
       query = query.where('visibility', isEqualTo: true);
     }
-    query = _applySortOrder(query, q.sort);
+    query = _applySortOrder(query, sortOverride ?? q.sort);
     if (startAfter != null) {
       query = query.startAfterDocument(startAfter);
     }
@@ -360,7 +414,7 @@ class ProductCatalogService extends ChangeNotifier {
       case CatalogSort.newest:
         return query.orderBy('created_at', descending: true);
       case CatalogSort.priceLowHigh:
-        return query.orderBy('price', descending: false).orderBy('created_at', descending: true);
+        return query.orderBy('effectivePrice', descending: false).orderBy('created_at', descending: true);
       case CatalogSort.saleFirst:
         return query.orderBy('onSale', descending: true).orderBy('created_at', descending: true);
       case CatalogSort.mostPopular:
@@ -371,9 +425,11 @@ class ProductCatalogService extends ChangeNotifier {
   Query<Map<String, dynamic>> _buildFirestoreQuery({
     required CatalogQuery q,
     required QueryDocumentSnapshot<Map<String, dynamic>>? startAfter,
+    CatalogSort? sortOverride,
   }) {
+    final sort = sortOverride ?? q.sort;
     if (_usesSimpleBrowse(q)) {
-      return _simpleBrowseQuery(q: q, startAfter: startAfter);
+      return _simpleBrowseQuery(q: q, startAfter: startAfter, sortOverride: sort);
     }
 
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection('products');
@@ -397,7 +453,7 @@ class ProductCatalogService extends ChangeNotifier {
           .startAt([prefix])
           .endAt(['$prefix\uf8ff']);
     } else if (terms.isNotEmpty) {
-      query = _applySortOrder(query, q.sort);
+      query = _applySortOrder(query, sort);
     } else {
       final seasons = ProductCatalog.seasonsForFilter(q.seasonFilter);
       if (seasons.isNotEmpty) {
@@ -410,7 +466,7 @@ class ProductCatalogService extends ChangeNotifier {
         query = query.where('onSale', isEqualTo: true);
       }
       query = _applyAudienceFilters(query, q);
-      query = _applySortOrder(query, q.sort);
+      query = _applySortOrder(query, sort);
     }
 
     if (startAfter != null) {
