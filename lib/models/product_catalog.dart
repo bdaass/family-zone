@@ -398,6 +398,11 @@ class ProductCatalog {
     return (data['description'] ?? '').toString();
   }
 
+  /// Internal note visible to staff in the admin panel only (not shown to shoppers).
+  static String staffNotesFrom(Map<String, dynamic> data) {
+    return (data['staffNotes'] ?? '').toString().trim();
+  }
+
   static String sizeFrom(Map<String, dynamic> data) {
     final stored = (data['size'] ?? '').toString().trim();
     if (stored.isNotEmpty) return stored;
@@ -761,7 +766,12 @@ class ProductCatalog {
     return stockQty <= lowStockThreshold;
   }
 
-  static double priceFrom(Map<String, dynamic> data) => (data['price'] ?? 0.0).toDouble();
+  static double priceFrom(Map<String, dynamic> data) {
+    final raw = data['price'];
+    if (raw is num) return raw.toDouble();
+    if (raw is String) return double.tryParse(raw.trim()) ?? 0.0;
+    return 0.0;
+  }
 
   static int? discountPercentFrom(Map<String, dynamic> data) {
     final raw = data['discountPercent'];

@@ -19,10 +19,10 @@ class ProductImageSettings {
   static const double catalogImageAspectRatio = 1;
 
   /// Minimum footer space for title, sizes, colors, and the add-to-cart button.
-  static const double catalogCardFooterMinHeight = 188;
+  static const double catalogCardFooterMinHeight = 152;
 
   /// Space between variant info and the add-to-cart button in catalog cards.
-  static const double catalogAddToCartTopSpacing = 12;
+  static const double catalogAddToCartTopSpacing = 8;
 
   /// Bottom inset below the add-to-cart button in catalog cards.
   static const double catalogCardFooterBottomPadding = 16;

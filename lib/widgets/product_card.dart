@@ -152,70 +152,65 @@ class _ProductCardItemState extends State<ProductCardItem> {
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
+                          Text(
+                            widget.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: widget.isHidden ? AppColors.inkMuted : AppColors.ink,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          if (widget.description.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.description,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          Row(
                             children: [
-                              Text(
-                                widget.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                  color: widget.isHidden ? AppColors.inkMuted : AppColors.ink,
-                                  letterSpacing: -0.3,
-                                ),
-                              ),
-                              if (widget.description.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  widget.description,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
-                                ),
-                              ],
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  if (ProductCatalog.sizesDisplayLabel(widget.size).isNotEmpty)
-                                    Flexible(
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: AppDecor.pill(color: AppColors.cream),
-                                        child: Text(
-                                          ProductCatalog.sizesDisplayLabel(widget.size),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.ink, letterSpacing: 0.6),
-                                        ),
-                                      ),
+                              if (ProductCatalog.sizesDisplayLabel(widget.size).isNotEmpty)
+                                Flexible(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: AppDecor.pill(color: AppColors.cream),
+                                    child: Text(
+                                      ProductCatalog.sizesDisplayLabel(widget.size),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.ink, letterSpacing: 0.6),
                                     ),
-                                  const Spacer(),
-                                  _PriceLabel(price: widget.price, soldPrice: widget.soldPrice),
-                                ],
-                              ),
-                              if (ProductCatalog.colorsFromField(widget.colors).isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                _ColorSwatches(colors: ProductCatalog.colorsFromField(widget.colors)),
-                              ],
-                              if (widget.showProductId) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  S.fmt('product_id_label', {'id': widget.productId}),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 9, color: AppColors.inkMuted),
+                                  ),
                                 ),
-                              ],
+                              const Spacer(),
+                              _PriceLabel(price: widget.price, soldPrice: widget.soldPrice),
                             ],
                           ),
+                          if (ProductCatalog.colorsFromField(widget.colors).isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            _ColorSwatches(colors: ProductCatalog.colorsFromField(widget.colors)),
+                          ],
+                          if (widget.showProductId) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              S.fmt('product_id_label', {'id': widget.productId}),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 9, color: AppColors.inkMuted),
+                            ),
+                          ],
                           if (!widget.showStaffActions && !widget.isSoldOut && widget.onAddToCart != null)
                             Padding(
-                              padding: const EdgeInsets.only(top: 6),
+                              padding: EdgeInsets.only(top: ProductImageSettings.catalogAddToCartTopSpacing),
                               child: SizedBox(
                                 width: double.infinity,
                                 height: 32,

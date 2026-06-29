@@ -31,6 +31,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   final _productIdController = TextEditingController();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
+  final _staffNotesController = TextEditingController();
   final _priceController = TextEditingController();
   int _productImagesKey = 0;
   int _variantInventoryKey = 0;
@@ -114,6 +115,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     final productId = _productIdController.text.trim();
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
+    final staffNotes = _staffNotesController.text.trim();
     final priceParsed = double.parse(_priceController.text.trim());
 
     final inventorySave = ProductCatalog.resolveVariantInventoryForSave(_variantInventory);
@@ -155,6 +157,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         'productId': productId,
         'title': title,
         'description': description,
+        'staffNotes': staffNotes,
         'size': size,
         if (colors.isNotEmpty) 'colors': colors,
         'price': priceParsed.toDouble(),
@@ -199,6 +202,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
       _productIdController.clear();
       _titleController.clear();
       _descController.clear();
+      _staffNotesController.clear();
       setState(() {
         _productImagesKey++;
         _variantInventoryKey++;
@@ -241,6 +245,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
     _productIdController.dispose();
     _titleController.dispose();
     _descController.dispose();
+    _staffNotesController.dispose();
     _priceController.dispose();
     _discountPercentController.dispose();
     _salePriceController.dispose();
@@ -311,6 +316,15 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
               TextField(
                 controller: _descController,
                 decoration: InputDecoration(labelText: S.of('field_description'), isDense: true),
+                maxLines: 2,
+              ),
+              TextField(
+                controller: _staffNotesController,
+                decoration: InputDecoration(
+                  labelText: S.of('field_staff_notes'),
+                  hintText: S.of('field_staff_notes_hint'),
+                  isDense: true,
+                ),
                 maxLines: 2,
               ),
             ],

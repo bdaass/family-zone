@@ -116,6 +116,13 @@ service cloud.firestore {
       && !employeeChangedModerationFields();
   }
 
+  function employeeStaffNotesUpdate() {
+    return isEmployee()
+      && isPublishedProduct()
+      && onlyFieldsChanged(['staffNotes'])
+      && request.resource.data.staffNotes is string;
+  }
+
   function favoriteCountDeltaValid() {
     let oldCount = resource.data.get('favoriteCount', 0);
     let newCount = request.resource.data.favoriteCount;
@@ -161,6 +168,7 @@ service cloud.firestore {
 
     allow update: if isAdmin()
       || employeePendingEditUpdate()
+      || employeeStaffNotesUpdate()
       || employeeUnpublishedUpdate()
       || (isSignedIn()
         && onlyFieldsChanged(['favoriteCount'])

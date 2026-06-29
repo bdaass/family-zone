@@ -216,6 +216,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         _userSubscription = null;
         if (!mounted) return;
         final wasStaff = _isStaff;
+        _catalog.adminCanBackfillPrices = false;
         setState(() {
           userRole = 'guest';
           _likedProductIds = {};
@@ -265,6 +266,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
       final newRole = data['role']?.toString() ?? 'client';
       final staffModeChanged = ProductPermissions.isStaff(newRole) != _isStaff;
+      _catalog.adminCanBackfillPrices = newRole == 'admin';
       setState(() {
         userRole = newRole;
         _likedProductIds = Set<String>.from(data['likedProducts'] ?? []);
@@ -400,6 +402,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           productId: ProductCatalog.productIdFrom(data, docId),
           title: ProductCatalog.titleFrom(data),
           description: ProductCatalog.descriptionFrom(data),
+          staffNotes: ProductCatalog.staffNotesFrom(data),
           size: ProductCatalog.sizeFrom(data),
           colors: ProductCatalog.colorsFrom(data),
           variantInventory: ProductCatalog.variantInventoryFrom(data),
@@ -428,7 +431,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
       final newProductId = result.remove('productId') as String?;
       final imageUpdate = result.remove('_imageUpdate') as ProductImageUpdate?;
+      final staffNotes = (result.remove('staffNotes') as String?)?.trim() ?? '';
+      final priorStaffNotes = ProductCatalog.staffNotesFrom(data);
+      final staffNotesChanged = staffNotes != priorStaffNotes;
       final deferImageDeletes = ProductPermissions.requiresEditApproval(userRole) && isPublished;
+      final imagesChanged = imageUpdate != null &&
+          (imageUpdate.newImages.isNotEmpty ||
+              imageUpdate.newBarcodeImage != null ||
+              imageUpdate.removedImageUrls.isNotEmpty);
 
       if (imageUpdate != null) {
         final applied = await ProductImageService.applyImageUpdate(
@@ -456,6 +466,27 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           return;
         }
 
+        if (staffNotesChanged) {
+          await ProductWriteService.updateStaffNotes(docId: docId, staffNotes: staffNotes);
+        }
+
+        final catalogChanged = ProductWriteService.hasCatalogFieldChanges(
+          proposed: result,
+          current: data,
+          docId: docId,
+          imagesChanged: imagesChanged,
+        );
+
+        if (!catalogChanged) {
+          _invalidateCatalog();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(S.of('item_updated'))),
+            );
+          }
+          return;
+        }
+
         await ProductWriteService.submitPendingEdit(
           docId: docId,
           proposed: result,
@@ -474,6 +505,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         result['needsApproval'] = true;
         result['editPending'] = false;
         result['pendingEdit'] = FieldValue.delete();
+      }
+
+      if (staffNotesChanged) {
+        result['staffNotes'] = staffNotes;
       }
 
       await ProductWriteService.updateProduct(
@@ -657,6 +692,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       productId: ProductCatalog.productIdFrom(data, docId),
       title: ProductCatalog.titleFrom(data),
       description: ProductCatalog.descriptionFrom(data),
+      staffNotes: ProductCatalog.staffNotesFrom(data),
+      showStaffNotes: _isStaff,
       imageUrl: ProductCatalog.primaryImageUrl(data),
       imageUrls: imageUrls,
       barcodeImageUrl: userRole == 'admin' ? ProductCatalog.barcodeImageUrlFrom(data) : null,

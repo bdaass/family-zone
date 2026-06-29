@@ -70,8 +70,10 @@ class ProductCatalogService extends ChangeNotifier {
 
   static const int pageSize = 18;
   static const _maxBackfillRounds = 5;
-  static bool _priceBackfillDone = false;
+  /// Admin session: may backfill [effectivePrice] on legacy products (Firestore rules).
+  bool adminCanBackfillPrices = false;
   bool? _sortUsesBrowseFallback;
+  String _priceSortOrderField = 'price';
 
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _docs = [];
   int _currentPage = 1;
@@ -112,7 +114,7 @@ class ProductCatalogService extends ChangeNotifier {
     _cursorQueryKey = _queryCacheKey(query);
     _totalCount = null;
     _currentPage = 1;
-    if (query.sort == CatalogSort.priceLowHigh) {
+    if (query.sort == CatalogSort.priceLowHigh && adminCanBackfillPrices) {
       await _ensurePriceSortReady();
     }
     await loadPage(query, 1);
@@ -120,7 +122,7 @@ class ProductCatalogService extends ChangeNotifier {
 
   Future<void> loadPage(CatalogQuery query, int page) async {
     final targetPage = page < 1 ? 1 : page;
-    if (query.sort == CatalogSort.priceLowHigh && targetPage == 1) {
+    if (query.sort == CatalogSort.priceLowHigh && targetPage == 1 && adminCanBackfillPrices) {
       await _ensurePriceSortReady();
     }
     final generation = ++_fetchGeneration;
@@ -131,6 +133,12 @@ class ProductCatalogService extends ChangeNotifier {
       _cursorQueryKey = key;
       _totalCount = null;
       _sortUsesBrowseFallback = null;
+      _priceSortOrderField = 'price';
+    }
+
+    if (query.sort == CatalogSort.priceLowHigh && !_usesSimpleBrowse(query)) {
+      // Filtered price sort: browse visible catalog by price, apply filters client-side.
+      _sortUsesBrowseFallback = true;
     }
 
     _query = query;
@@ -146,8 +154,11 @@ class ProductCatalogService extends ChangeNotifier {
       final startAfter = await _resolveCursorForPage(query, targetPage, generation);
       if (generation != _fetchGeneration) return;
 
-      var batch = await _fetchSinglePage(query: query, startAfter: startAfter);
+      final fetched = await _fetchSinglePage(query: query, startAfter: startAfter);
       if (generation != _fetchGeneration) return;
+
+      var batch = fetched.docs;
+      final serverCursor = fetched.serverCursor;
 
       if (targetPage == 1) {
         final direct = await _fetchDirectIdMatch(query);
@@ -163,10 +174,16 @@ class ProductCatalogService extends ChangeNotifier {
         }
       }
 
+      if (query.sort == CatalogSort.priceLowHigh && batch.length > 1) {
+        batch = sortCatalogDocs(batch, CatalogSort.priceLowHigh);
+      }
+
       _docs = batch;
       _currentPage = targetPage;
       _hasNextPage = batch.length >= pageSize;
-      if (batch.isNotEmpty) {
+      if (serverCursor != null) {
+        _pageEndCursors[targetPage] = serverCursor;
+      } else if (batch.isNotEmpty) {
         _pageEndCursors[targetPage] = batch.last;
       } else if (targetPage > 1) {
         _hasNextPage = false;
@@ -232,18 +249,19 @@ class ProductCatalogService extends ChangeNotifier {
     }
 
     for (var p = knownPage + 1; p < page; p++) {
-      final batch = await _fetchSinglePage(query: query, startAfter: cursor);
+      final fetched = await _fetchSinglePage(query: query, startAfter: cursor);
       if (generation != _fetchGeneration) return cursor;
-      if (batch.isEmpty) return cursor;
-      cursor = batch.last;
+      if (fetched.docs.isEmpty) return cursor;
+      cursor = fetched.serverCursor ?? fetched.docs.last;
       _pageEndCursors[p] = cursor;
-      if (batch.length < pageSize) return cursor;
+      if (fetched.docs.length < pageSize) return cursor;
     }
 
     return cursor;
   }
 
-  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _fetchSinglePage({
+  Future<({List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, QueryDocumentSnapshot<Map<String, dynamic>>? serverCursor})>
+      _fetchSinglePage({
     required CatalogQuery query,
     required QueryDocumentSnapshot<Map<String, dynamic>>? startAfter,
   }) async {
@@ -252,7 +270,8 @@ class ProductCatalogService extends ChangeNotifier {
     var rounds = 0;
     var serverHasMore = true;
     final needsClientPass = _needsClientSidePass(query);
-    final maxRounds = _sortUsesBrowseFallback == true ? 15 : _maxBackfillRounds;
+    final maxRounds = _sortUsesBrowseFallback == true ? 20 : _maxBackfillRounds;
+    QueryDocumentSnapshot<Map<String, dynamic>>? serverCursor;
 
     while (results.length < pageSize && rounds < maxRounds && serverHasMore) {
       rounds++;
@@ -260,6 +279,7 @@ class ProductCatalogService extends ChangeNotifier {
       if (snap.docs.isEmpty) break;
 
       cursor = snap.docs.last;
+      serverCursor = cursor;
       serverHasMore = snap.docs.length >= pageSize;
 
       for (final doc in snap.docs) {
@@ -269,12 +289,11 @@ class ProductCatalogService extends ChangeNotifier {
       }
     }
 
-    return results;
+    return (docs: results, serverCursor: serverCursor);
   }
 
   Future<void> _ensurePriceSortReady() async {
-    if (_priceBackfillDone) return;
-    _priceBackfillDone = true;
+    if (!adminCanBackfillPrices) return;
     try {
       final result = await CatalogMigrationService.backfillEffectivePrices();
       if (result.updated > 0) {
@@ -414,7 +433,9 @@ class ProductCatalogService extends ChangeNotifier {
       case CatalogSort.newest:
         return query.orderBy('created_at', descending: true);
       case CatalogSort.priceLowHigh:
-        return query.orderBy('effectivePrice', descending: false).orderBy('created_at', descending: true);
+        return query
+            .orderBy(_priceSortOrderField, descending: false)
+            .orderBy('created_at', descending: true);
       case CatalogSort.saleFirst:
         return query.orderBy('onSale', descending: true).orderBy('created_at', descending: true);
       case CatalogSort.mostPopular:

@@ -18,6 +18,8 @@ class ProductDetailSheet extends StatefulWidget {
   final String productId;
   final String title;
   final String description;
+  final String staffNotes;
+  final bool showStaffNotes;
   final String imageUrl;
   final List<String> imageUrls;
   final String? barcodeImageUrl;
@@ -48,6 +50,8 @@ class ProductDetailSheet extends StatefulWidget {
     required this.productId,
     required this.title,
     required this.description,
+    this.staffNotes = '',
+    this.showStaffNotes = false,
     required this.imageUrl,
     this.imageUrls = const [],
     this.barcodeImageUrl,
@@ -79,6 +83,8 @@ class ProductDetailSheet extends StatefulWidget {
     required String productId,
     required String title,
     required String description,
+    String staffNotes = '',
+    bool showStaffNotes = false,
     required String imageUrl,
     List<String> imageUrls = const [],
     String? barcodeImageUrl,
@@ -108,6 +114,8 @@ class ProductDetailSheet extends StatefulWidget {
       productId: productId,
       title: title,
       description: description,
+      staffNotes: staffNotes,
+      showStaffNotes: showStaffNotes,
       imageUrl: imageUrl,
       imageUrls: imageUrls,
       barcodeImageUrl: barcodeImageUrl,
@@ -363,6 +371,24 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           Text(
             widget.description,
             style: const TextStyle(fontSize: 14, color: AppColors.ink, height: 1.55, fontWeight: FontWeight.w500),
+          ),
+        ],
+        if (widget.showStaffNotes) ...[
+          const SizedBox(height: 20),
+          Text(
+            S.of('field_staff_notes'),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.staffNotes.isNotEmpty ? widget.staffNotes : '—',
+            style: TextStyle(
+              fontSize: 14,
+              color: widget.staffNotes.isNotEmpty ? AppColors.ink : AppColors.inkMuted,
+              height: 1.55,
+              fontWeight: FontWeight.w500,
+              fontStyle: widget.staffNotes.isEmpty ? FontStyle.italic : FontStyle.normal,
+            ),
           ),
         ],
         const SizedBox(height: 20),
@@ -637,7 +663,7 @@ class _AdminBarcodePreviewState extends State<_AdminBarcodePreview> {
                       child: ProductNetworkImage(
                         url: url,
                         fit: BoxFit.contain,
-                        cacheSize: ProductImageSettings.detailCacheSize,
+                        cacheWidth: ProductImageSettings.detailCacheSize,
                       ),
                     ),
                   ),
@@ -724,7 +750,7 @@ class _AdminBarcodePreviewState extends State<_AdminBarcodePreview> {
                           child: ProductNetworkImage(
                             url: url!,
                             fit: BoxFit.contain,
-                            cacheSize: ProductImageSettings.detailCacheSize,
+                            cacheWidth: ProductImageSettings.detailCacheSize,
                           ),
                         ),
                       const SizedBox(height: 8),

@@ -19,6 +19,7 @@ class EditProductSheet extends StatefulWidget {
   final String productId;
   final String title;
   final String description;
+  final String staffNotes;
   final String size;
   final String colors;
   final double price;
@@ -41,6 +42,7 @@ class EditProductSheet extends StatefulWidget {
     required this.productId,
     required this.title,
     required this.description,
+    this.staffNotes = '',
     required this.size,
     this.colors = '',
     required this.price,
@@ -66,6 +68,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
   late final TextEditingController _productIdController;
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
+  late final TextEditingController _staffNotesController;
   late final TextEditingController _priceController;
   late VariantInventoryMap _variantInventory;
   late final TextEditingController _discountPercentController;
@@ -94,6 +97,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _productIdController = TextEditingController(text: widget.productId);
     _titleController = TextEditingController(text: widget.title);
     _descController = TextEditingController(text: widget.description);
+    _staffNotesController = TextEditingController(text: widget.staffNotes);
     _priceController = TextEditingController(text: widget.price.toStringAsFixed(2));
     _discountPercentController = TextEditingController(
       text: widget.discountPercent?.toString() ?? '',
@@ -114,6 +118,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _productIdController.dispose();
     _titleController.dispose();
     _descController.dispose();
+    _staffNotesController.dispose();
     _priceController.dispose();
     _discountPercentController.dispose();
     _salePriceController.dispose();
@@ -124,6 +129,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
     final productId = _productIdController.text.trim();
     final title = _titleController.text.trim();
     final description = _descController.text.trim();
+    final staffNotes = _staffNotesController.text.trim();
     final price = double.tryParse(_priceController.text.trim());
     final discountText = _discountPercentController.text.trim();
     final saleText = _salePriceController.text.trim();
@@ -182,6 +188,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
       'productId': productId,
       'title': title,
       'description': description,
+      'staffNotes': staffNotes,
       'size': inventoryFields['size'],
       if ((inventoryFields['colors'] as String).isEmpty)
         'colors': FieldValue.delete()
@@ -273,6 +280,14 @@ class _EditProductSheetState extends State<EditProductSheet> {
                 TextField(
                   controller: _descController,
                   decoration: InputDecoration(labelText: S.of('field_description')),
+                  maxLines: 3,
+                ),
+                TextField(
+                  controller: _staffNotesController,
+                  decoration: InputDecoration(
+                    labelText: S.of('field_staff_notes'),
+                    hintText: S.of('field_staff_notes_hint'),
+                  ),
                   maxLines: 3,
                 ),
               ],

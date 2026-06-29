@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'product_catalog.dart';
 
-/// Catalog sort — applied server-side via Firestore [effectivePrice], [favoriteCount], [onSale].
+/// Catalog sort — Firestore orders by [price], [favoriteCount], or [onSale]; price pages refine sale pricing client-side.
 enum CatalogSort {
   newest,
   priceLowHigh,

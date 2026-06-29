@@ -68,6 +68,74 @@ class ProductWriteService {
     await oldRef.update({'visibility': false, 'supersededBy': trimmedId});
   }
 
+  static Future<void> updateStaffNotes({
+    required String docId,
+    required String staffNotes,
+  }) async {
+    await FirebaseFirestore.instance.collection('products').doc(docId).update({
+      'staffNotes': staffNotes,
+    });
+  }
+
+  /// True when [proposed] changes catalog fields compared with [current] (excluding staff notes).
+  static bool hasCatalogFieldChanges({
+    required Map<String, dynamic> proposed,
+    required Map<String, dynamic> current,
+    required String docId,
+    bool imagesChanged = false,
+  }) {
+    if (imagesChanged) return true;
+
+    final audience = ProductCatalog.audienceFrom(current);
+    if ((proposed['title'] ?? '').toString().trim() != ProductCatalog.titleFrom(current)) return true;
+    if ((proposed['description'] ?? '').toString().trim() != ProductCatalog.descriptionFrom(current)) {
+      return true;
+    }
+
+    final proposedPrice = proposed['price'];
+    final price = proposedPrice is num
+        ? proposedPrice.toDouble()
+        : double.tryParse(proposedPrice?.toString() ?? '') ?? ProductCatalog.priceFrom(current);
+    if ((price - ProductCatalog.priceFrom(current)).abs() > 0.001) return true;
+
+    if ((proposed['season'] ?? '').toString() != (current['season'] ?? 'summer').toString()) return true;
+    if ((proposed['ageGroup'] ?? '').toString() != audience.ageGroup) return true;
+    if ((proposed['sex'] ?? '').toString() != audience.sex) return true;
+    if (ProductCatalog.normalizeType((proposed['type'] ?? '').toString()) !=
+        ProductCatalog.normalizeType(current['type']?.toString())) {
+      return true;
+    }
+
+    if ((proposed['size'] ?? '').toString() != ProductCatalog.sizeFrom(current)) return true;
+    if ((proposed['colors'] ?? '').toString() != ProductCatalog.colorsFrom(current)) return true;
+
+    final proposedSold = proposed['soldPrice'];
+    final currentSold = ProductCatalog.soldPriceFrom(current);
+    final parsedSold = proposedSold is num
+        ? proposedSold.toDouble()
+        : double.tryParse(proposedSold?.toString() ?? '');
+    if (parsedSold == null && currentSold != null) return true;
+    if (parsedSold != null && currentSold == null) return true;
+    if (parsedSold != null && currentSold != null && (parsedSold - currentSold).abs() > 0.001) {
+      return true;
+    }
+
+    final proposedDiscount = proposed['discountPercent'];
+    final currentDiscount = ProductCatalog.discountPercentFrom(current);
+    final parsedDiscount = proposedDiscount is int
+        ? proposedDiscount
+        : int.tryParse(proposedDiscount?.toString() ?? '');
+    if (parsedDiscount != currentDiscount) return true;
+
+    final proposedInventory = proposed['variantInventory'];
+    if (proposedInventory is Map) {
+      final currentInventory = ProductCatalog.variantInventoryFrom(current);
+      if (proposedInventory.toString() != currentInventory.toString()) return true;
+    }
+
+    return false;
+  }
+
   /// Stores proposed changes for admin review without changing the live catalog entry.
   static Future<void> submitPendingEdit({
     required String docId,
