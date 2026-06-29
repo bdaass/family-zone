@@ -25,9 +25,9 @@ import '../widgets/ambient_background.dart';
 import '../widgets/dashboard_hero.dart';
 import '../widgets/family_zone_brand.dart';
 import '../widgets/edit_product_sheet.dart';
+import '../pages/cart_page.dart';
 import '../widgets/add_to_cart_sheet.dart';
 import '../widgets/product_detail_sheet.dart';
-import '../widgets/cart_sheet.dart';
 import '../widgets/favorites_sheet.dart';
 import '../widgets/filter_bottom_sheet.dart';
 import '../services/cart_service.dart';
@@ -643,8 +643,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
-  void _showCartSheet() {
-    CartSheet.show(context);
+  void _openCart() {
+    CartPage.open(context);
   }
 
   Future<void> _contactViaWhatsApp() async {
@@ -716,7 +716,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       variantInventory: ProductCatalog.variantInventoryFrom(data),
       branchStock: ProductCatalog.branchStockFrom(data),
       onFavoriteToggle: _isClient ? () => _toggleFavorite(docId) : null,
-      onAddToCart: _isStaff || (data['sold'] ?? false) ? null : () => _openAddToCart(docId, data),
+      enableShopping: !_isStaff && !(data['sold'] ?? false),
     );
   }
 
@@ -1017,7 +1017,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                                   constraints: iconConstraints,
                                   padding: EdgeInsets.zero,
                                   tooltip: S.of('tooltip_cart'),
-                                  onPressed: _showCartSheet,
+                                  onPressed: _openCart,
                                   icon: Badge(
                                     isLabelVisible: CartService.instance.itemCount > 0,
                                     label: Text('${CartService.instance.itemCount}'),
@@ -1294,6 +1294,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       tween: Tween(begin: 0.0, end: 1.0),
                       curve: Curves.easeOutCubic,
                       builder: (context, value, child) {
+                        if (!context.mounted) return child ?? const SizedBox.shrink();
                         if (kIsWeb) {
                           return Opacity(opacity: value, child: child);
                         }
@@ -1319,6 +1320,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               child: CatalogPaginationBar(
                 currentPage: _catalog.currentPage,
                 totalPages: _catalog.totalPages,
+                totalItems: _catalog.totalCount,
                 isLoading: _catalog.isLoading,
                 onPageSelected: _goToPage,
               ),

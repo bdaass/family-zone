@@ -12,6 +12,7 @@ import '../utils/product_image_settings.dart';
 import '../theme/app_theme.dart';
 import '../pages/product_detail_page.dart';
 import 'product_image_carousel.dart';
+import 'product_variant_picker.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final String productDocId;
@@ -42,7 +43,7 @@ class ProductDetailSheet extends StatefulWidget {
   final VariantInventoryMap variantInventory;
   final Map<String, int?> branchStock;
   final VoidCallback? onFavoriteToggle;
-  final VoidCallback? onAddToCart;
+  final bool enableShopping;
 
   const ProductDetailSheet({
     super.key,
@@ -74,7 +75,7 @@ class ProductDetailSheet extends StatefulWidget {
     this.variantInventory = const {},
     this.branchStock = const {},
     this.onFavoriteToggle,
-    this.onAddToCart,
+    this.enableShopping = false,
   });
 
   static Future<void> show(
@@ -107,7 +108,7 @@ class ProductDetailSheet extends StatefulWidget {
     VariantInventoryMap variantInventory = const {},
     Map<String, int?> branchStock = const {},
     VoidCallback? onFavoriteToggle,
-    VoidCallback? onAddToCart,
+    bool enableShopping = false,
   }) {
     final sheet = ProductDetailSheet(
       productDocId: productDocId,
@@ -138,7 +139,7 @@ class ProductDetailSheet extends StatefulWidget {
       variantInventory: variantInventory,
       branchStock: branchStock,
       onFavoriteToggle: onFavoriteToggle,
-      onAddToCart: onAddToCart,
+      enableShopping: enableShopping,
     );
 
     final isWide = MediaQuery.sizeOf(context).width > 720;
@@ -224,8 +225,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width > 720;
-    final sizes = ProductCatalog.sizesForSelection(widget.sizeField);
-    final colors = ProductCatalog.colorsForSelection(widget.colorField);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -277,7 +276,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           children: [
                             Expanded(child: _imagePanel(isWide: true)),
                             const SizedBox(width: 24),
-                            Expanded(child: _detailsPanel(sizes, colors, isWide: true)),
+                            Expanded(child: _detailsPanel(isWide: true)),
                           ],
                         )
                       : Column(
@@ -285,7 +284,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           children: [
                             _imagePanel(isWide: false),
                             const SizedBox(height: 20),
-                            _detailsPanel(sizes, colors, isWide: false),
+                            _detailsPanel(isWide: false),
                           ],
                         ),
                 ),
@@ -338,7 +337,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     );
   }
 
-  Widget _detailsPanel(List<String> sizes, List<String> colors, {required bool isWide}) {
+  Widget _detailsPanel({required bool isWide}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -389,6 +388,25 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               fontWeight: FontWeight.w500,
               fontStyle: widget.staffNotes.isEmpty ? FontStyle.italic : FontStyle.normal,
             ),
+          ),
+        ],
+        if (widget.enableShopping && !widget.isSoldOut) ...[
+          const SizedBox(height: 24),
+          ProductVariantPicker(
+            productDocId: widget.productDocId.isNotEmpty ? widget.productDocId : widget.productId,
+            productId: widget.productId,
+            title: widget.title,
+            imageUrl: widget.imageUrls.isNotEmpty ? widget.imageUrls.first : widget.imageUrl,
+            sizeField: widget.sizeField,
+            colorField: widget.colorField,
+            price: widget.price,
+            soldPrice: widget.soldPrice,
+            variantInventory: widget.variantInventory,
+            onAdded: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(S.of('added_to_cart'))),
+              );
+            },
           ),
         ],
         const SizedBox(height: 20),
@@ -446,52 +464,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             storageProductId: widget.productDocId.isNotEmpty ? widget.productDocId : widget.productId,
           ),
         ],
-        const SizedBox(height: 20),
-        Text(
-          S.of('available_sizes'),
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: sizes
-              .map(
-                (size) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: AppDecor.pill(color: AppColors.white),
-                  child: Text(
-                    size,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.ink),
-                  ),
-                ),
-              )
-              .toList(),
-        ),
-        if (colors.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Text(
-            S.of('available_colors'),
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: colors
-                .map(
-                  (color) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: AppDecor.pill(color: AppColors.white),
-                    child: Text(
-                      ProductCatalog.colorDisplayName(color),
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.ink),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
         if (widget.favoriteCount > 0) ...[
           const SizedBox(height: 16),
           Row(
@@ -503,25 +475,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
               ),
             ],
-          ),
-        ],
-        if (!widget.isSoldOut && widget.onAddToCart != null) ...[
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                widget.onAddToCart!();
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.ink,
-                foregroundColor: AppColors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-              child: Text(S.of('add_to_cart'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-            ),
           ),
         ],
       ],
