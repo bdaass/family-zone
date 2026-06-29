@@ -13,6 +13,15 @@ class StoreConfig {
   static const facebookUrl = 'https://www.facebook.com/familyzonelb/';
   static const instagramUrl = 'https://www.instagram.com/familyzone.lb/';
 
+  /// Play Store listing (update when the Android app is published).
+  static const androidApplicationId = 'com.familyzone.shop';
+
+  /// iOS bundle id — set `ios_store_url` in Firestore when the App Store link is known.
+  static const iosBundleId = 'com.familyzone.shop';
+
+  static String get androidStoreUrl =>
+      'https://play.google.com/store/apps/details?id=$androidApplicationId';
+
   static const workingHoursEn = '8 AM – 9 PM, every day';
   static const workingHoursAr = '٨ صباحاً – ٩ مساءً، كل الأيام';
 

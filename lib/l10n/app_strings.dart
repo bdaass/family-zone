@@ -111,6 +111,11 @@ class S {
   static const _map = {
     'en': {
       'app_title': 'Family Zone',
+      'force_update_title': 'Update required',
+      'force_update_message':
+          'This version ({installed}) is no longer supported. Please install version {required} or newer to continue shopping.',
+      'force_update_button': 'Update now',
+      'force_update_missing_store_url': 'Store link not configured yet.',
       'brand_name': 'Family Zone',
       'store_name': 'Family Zone',
       'tagline': 'The fashion place to be',
@@ -534,6 +539,11 @@ class S {
     },
     'ar': {
       'app_title': 'Family Zone',
+      'force_update_title': 'يلزم التحديث',
+      'force_update_message':
+          'هذا الإصدار ({installed}) لم يعد مدعوماً. يُرجى تثبيت الإصدار {required} أو أحدث للمتابعة.',
+      'force_update_button': 'حدّث الآن',
+      'force_update_missing_store_url': 'رابط المتجر غير مضبوط بعد.',
       'brand_name': 'Family Zone',
       'store_name': 'فاميلي زون',
       'tagline': 'وجهتك للأزياء العائلية',

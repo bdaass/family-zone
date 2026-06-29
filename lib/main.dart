@@ -1,20 +1,94 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'pages/dashboard.dart';
 import 'firebase_options.dart';
 import 'l10n/app_strings.dart';
 import 'services/cart_service.dart';
 import 'services/locale_service.dart';
 import 'theme/app_theme.dart';
+import 'utils/web_platform.dart';
+import 'widgets/force_update_gate.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
+Future<void>? _firebaseBootstrap;
+
+Future<void> _ensureFirebase() {
+  return _firebaseBootstrap ??= Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
-  );
-  CartService.instance.bindAuth();
-  runApp(const FamilyZoneApp());
+  ).then((_) {
+    CartService.instance.bindAuth();
+  });
+}
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  WebPlatform.configure();
+  if (kIsWeb) {
+    GoogleFonts.config.allowRuntimeFetching = false;
+  }
+  runApp(const BootstrapApp());
+}
+
+/// Shows the first frame immediately so the HTML splash can dismiss, then connects Firebase.
+class BootstrapApp extends StatelessWidget {
+  const BootstrapApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _ensureFirebase(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              backgroundColor: AppColors.cream,
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset('assets/images/logo.png', width: 88, height: 88),
+                    const SizedBox(height: 20),
+                    const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: AppColors.coral,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              backgroundColor: AppColors.cream,
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Could not connect. Check your internet and refresh.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.inkMuted, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return const ForceUpdateGate(child: FamilyZoneApp());
+      },
+    );
+  }
 }
 
 class FamilyZoneApp extends StatelessWidget {
