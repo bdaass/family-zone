@@ -54,5 +54,16 @@
 	<string>Take product and barcode photos for the catalogue.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose product and barcode photos from your library.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.280621792365-lu44ooavl6q88v8dnqlvqecdoseflkmu</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
