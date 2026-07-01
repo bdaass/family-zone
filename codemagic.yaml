@@ -31,11 +31,14 @@ workflows:
         script: |
           cd ios
           pod install
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles --project ios/Runner.xcodeproj
       - name: Build IPA
         script: |
           flutter build ipa --release \
             --build-name=1.0.0 \
-            --build-number=$CM_BUILD_NUMBER
+            --build-number=$CM_BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
