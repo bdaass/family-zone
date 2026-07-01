@@ -1,55 +1,125 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
   <meta name="description" content="Family Zone — fashion for the whole family.">
 
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="family_zone">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <meta name="apple-mobile-web-app-capable" content="no">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Family Zone">
+  <link rel="apple-touch-icon" href="loading-logo.png">
+  <link rel="icon" type="image/png" href="loading-logo.png"/>
 
   <title>Family Zone</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #F8F5F0;
+    }
+
+    #fz-loading {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: #F8F5F0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      transition: opacity 0.2s ease;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    #fz-loading.fz-hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #fz-loading img {
+      width: 88px;
+      height: 88px;
+      object-fit: contain;
+    }
+
+    #fz-loading p {
+      margin: 0;
+      color: #6E6E7E;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    .fz-spinner {
+      width: 34px;
+      height: 34px;
+      border: 3px solid #EDE8E0;
+      border-top-color: #E85D4A;
+      border-radius: 50%;
+      animation: fz-spin 0.85s linear infinite;
+    }
+
+    @keyframes fz-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
+  <div id="fz-loading" aria-live="polite" aria-busy="true">
+    <img src="loading-logo.png" alt="Family Zone" width="88" height="88">
+    <div class="fz-spinner" role="progressbar" aria-label="Loading"></div>
+    <p id="fz-loading-text">Loading Family Zone…</p>
+  </div>
+
   <script>
-    // Remove legacy Flutter service workers — they conflict with no-cache deploys
-    // and cause reload loops / crashes on iPhone Safari.
     (function () {
-      if (!('serviceWorker' in navigator)) return;
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
-        regs.forEach(function (reg) { reg.unregister(); });
-      });
-      if (window.caches && caches.keys) {
-        caches.keys().then(function (keys) {
-          keys.forEach(function (key) { caches.delete(key); });
+      var ua = navigator.userAgent || '';
+      var isIOS = /iPhone|iPad|iPod/i.test(ua)
+        || (ua.indexOf('Macintosh') !== -1 && navigator.maxTouchPoints > 1);
+      var isMobile = isIOS || /Android/i.test(ua);
+      var isGecko = /Firefox\//i.test(ua) && !/Seamonkey\//i.test(ua);
+      // Chromium Edge — HTML image overlays often 404 on skwasm; use fetch + Storage CORS instead.
+      var isEdge = /Edg\//i.test(ua);
+
+      window.__FZ_IS_IOS = isIOS;
+      window.__FZ_IS_MOBILE = isMobile;
+      window.__FZ_IS_GECKO = isGecko;
+      window.__FZ_IS_EDGE = isEdge;
+
+      // Drop stale Flutter service workers (offline-first breaks Edge image/network loads).
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (reg) { reg.unregister(); });
         });
       }
+
+      var lang = (navigator.language || '').toLowerCase();
+      var text = document.getElementById('fz-loading-text');
+      if (lang.indexOf('ar') === 0) {
+        document.documentElement.lang = 'ar';
+        document.documentElement.dir = 'rtl';
+        text.textContent = 'جاري تحميل فاميلي زون…';
+      }
+
+      function hideLoading() {
+        var el = document.getElementById('fz-loading');
+        if (!el || el.classList.contains('fz-hide')) return;
+        el.classList.add('fz-hide');
+        setTimeout(function () { el.remove(); }, 220);
+      }
+
+      window.addEventListener('flutter-first-frame', hideLoading);
     })();
   </script>
   <script src="flutter_bootstrap.js" async></script>

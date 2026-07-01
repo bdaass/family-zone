@@ -5,7 +5,6 @@ import '../firebase_options.dart';
 import '../models/top_slider_slide.dart';
 import '../services/staff_storage_auth.dart';
 import '../utils/hero_slider_settings.dart';
-import '../utils/storage_object_probe.dart';
 
 /// Loads locale- and viewport-specific hero banners from Firebase Storage.
 ///
@@ -120,22 +119,42 @@ class TopSliderService {
   }
 
   static Future<List<TopSliderSlide>> _resolveSlidesAt(String folderPath, {String idSuffix = ''}) async {
-    final results = await Future.wait(
-      _slideNames.map((name) async {
-        final objectPath = '$folderPath/$name.jpg';
-        final imageUrl = await _resolveImageUrl(objectPath);
-        if (imageUrl == null) return null;
-        return TopSliderSlide(
-          id: '${name.toLowerCase()}$idSuffix',
-          imageUrl: imageUrl,
-          category: TopSliderCategory.fromFileStem(name),
-        );
-      }),
-    );
+    final existing = await _existingSlideNames(folderPath);
+    if (existing.isEmpty) return [];
 
-    final slides = results.whereType<TopSliderSlide>().toList()
-      ..sort((a, b) => a.category.sortIndex.compareTo(b.category.sortIndex));
+    final slides = <TopSliderSlide>[];
+    for (final name in _slideNames) {
+      if (!existing.contains(name)) continue;
+      final objectPath = '$folderPath/$name.jpg';
+      slides.add(
+        TopSliderSlide(
+          id: '${name.toLowerCase()}$idSuffix',
+          imageUrl: publicMediaUrl(objectPath),
+          category: TopSliderCategory.fromFileStem(name),
+        ),
+      );
+    }
+
+    slides.sort((a, b) => a.category.sortIndex.compareTo(b.category.sortIndex));
     return slides;
+  }
+
+  /// Lists uploaded `.jpg` stems in a folder — one call, no 404 probes for missing slides.
+  static Future<Set<String>> _existingSlideNames(String folderPath) async {
+    try {
+      final result = await FirebaseStorage.instance.ref(folderPath).listAll();
+      final names = <String>{};
+      for (final item in result.items) {
+        final fileName = item.name;
+        if (!fileName.toLowerCase().endsWith('.jpg')) continue;
+        final stem = fileName.substring(0, fileName.length - 4);
+        if (_slideNames.contains(stem)) names.add(stem);
+      }
+      return names;
+    } catch (e) {
+      debugPrint('TopSliderService: listAll($folderPath): $e');
+      return {};
+    }
   }
 
   /// Public `alt=media` URL — works without Firebase Auth (same pattern as product images).
@@ -143,20 +162,6 @@ class TopSliderService {
     final bucket = _storageBucket ??= DefaultFirebaseOptions.currentPlatform.storageBucket!;
     final encoded = Uri.encodeComponent(objectPath);
     return 'https://firebasestorage.googleapis.com/v0/b/$bucket/o/$encoded?alt=media';
-  }
-
-  /// Resolves a display URL for a Storage object, or null if missing.
-  static Future<String?> _resolveImageUrl(String objectPath) async {
-    if (kIsWeb) {
-      try {
-        return await FirebaseStorage.instance.ref(objectPath).getDownloadURL();
-      } catch (_) {
-        return null;
-      }
-    }
-    final url = publicMediaUrl(objectPath);
-    if (!await storageObjectExistsAtUrl(url)) return null;
-    return url;
   }
 
   /// Local web build fallback for `flutter run -d chrome` before Storage upload.

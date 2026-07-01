@@ -4,8 +4,9 @@
     "method": ["GET", "HEAD", "PUT", "POST", "DELETE", "OPTIONS"],
     "responseHeader": [
       "Content-Type",
-      "Authorization",
       "Content-Length",
+      "Content-Range",
+      "Authorization",
       "X-Firebase-Storage-Version",
       "X-Goog-Upload-Protocol",
       "X-Goog-Upload-Command",

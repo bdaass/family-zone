@@ -116,7 +116,61 @@
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache, no-store, must-revalidate"
+            "value": "public, max-age=604800, stale-while-revalidate=86400"
+          }
+        ]
+      },
+      {
+        "source": "/main.dart.mjs",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=604800, stale-while-revalidate=86400"
+          }
+        ]
+      },
+      {
+        "source": "/main.dart.wasm",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/assets/NOTICES",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/assets/FontManifest.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/assets/AssetManifest.bin.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/loading-logo.png",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
           }
         ]
       },
@@ -126,6 +180,24 @@
           {
             "key": "Cache-Control",
             "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/canvaskit/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
           }
         ]
       },

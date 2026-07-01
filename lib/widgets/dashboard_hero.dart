@@ -12,6 +12,7 @@ import '../utils/hero_slider_settings.dart';
 import '../utils/web_platform.dart';
 import 'family_zone_brand.dart';
 import 'hero_slider_manage_sheet.dart';
+import 'product_image_carousel.dart';
 
 typedef TopSliderFilterCallback = void Function(TopSliderFilterAction action);
 
@@ -79,6 +80,17 @@ class _DashboardHeroState extends State<DashboardHero> {
     _autoTimer?.cancel();
     if (clearCache) TopSliderService.invalidateCache();
     if (!mounted) return;
+
+    // iPhone Safari: skip hero images entirely — static banner only (prevents OOM on swipe).
+    if (WebPlatform.isIOSWeb) {
+      setState(() {
+        _slides = const [];
+        _loading = false;
+        _page = 0;
+      });
+      return;
+    }
+
     setState(() => _loading = true);
 
     final slides = await TopSliderService.fetchSlides(
@@ -151,7 +163,7 @@ class _DashboardHeroState extends State<DashboardHero> {
           ),
           child: _loading
               ? _loadingState()
-              : _slides.isEmpty
+              : !WebPlatform.showDashboardHero || _slides.isEmpty
                   ? _fallbackHero()
                   : _sliderHero(),
         ),
@@ -221,12 +233,17 @@ class _DashboardHeroState extends State<DashboardHero> {
           clipBehavior: Clip.hardEdge,
           onPageChanged: _onPageChanged,
           itemCount: _slides.length,
-          itemBuilder: (context, index) => _SlidePage(
-            slide: _slides[index],
-            sliderSize: _sliderSize,
-            isActive: index == _page,
-            onTap: () => _onSlideTap(_slides[index]),
-          ),
+          itemBuilder: (context, index) {
+            // Phones: only decode the visible slide (same UX, less memory).
+            final loadImage = !WebPlatform.isMobileWeb || index == _page;
+            return _SlidePage(
+              slide: _slides[index],
+              sliderSize: _sliderSize,
+              isActive: index == _page,
+              loadImage: loadImage,
+              onTap: () => _onSlideTap(_slides[index]),
+            );
+          },
         ),
         PositionedDirectional(
           top: 12,
@@ -250,6 +267,7 @@ class _DashboardHeroState extends State<DashboardHero> {
                 key: ValueKey(_slides[_page.clamp(0, _slides.length - 1)].category),
                 category: _slides[_page.clamp(0, _slides.length - 1)].category,
                 compact: !widget.isWide,
+                lite: WebPlatform.isMobileWeb,
               ),
             ),
           ),
@@ -362,34 +380,43 @@ class _DashboardHeroState extends State<DashboardHero> {
 class _HeroCategoryBadge extends StatefulWidget {
   final TopSliderCategory category;
   final bool compact;
+  final bool lite;
 
-  const _HeroCategoryBadge({super.key, required this.category, required this.compact});
+  const _HeroCategoryBadge({
+    super.key,
+    required this.category,
+    required this.compact,
+    this.lite = false,
+  });
 
   @override
   State<_HeroCategoryBadge> createState() => _HeroCategoryBadgeState();
 }
 
 class _HeroCategoryBadgeState extends State<_HeroCategoryBadge> with SingleTickerProviderStateMixin {
-  late AnimationController _pulse;
+  AnimationController? _pulse;
 
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _pulse.forward();
+    if (widget.lite) return;
+    final pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+    _pulse = pulse;
+    pulse.forward();
   }
 
   @override
   void didUpdateWidget(covariant _HeroCategoryBadge oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.lite) return;
     if (oldWidget.category != widget.category) {
-      _pulse.forward(from: 0);
+      _pulse?.forward(from: 0);
     }
   }
 
   @override
   void dispose() {
-    _pulse.dispose();
+    _pulse?.dispose();
     super.dispose();
   }
 
@@ -439,14 +466,20 @@ class _HeroCategoryBadgeState extends State<_HeroCategoryBadge> with SingleTicke
     final style = _style(widget.category);
     if (style.label.isEmpty) return const SizedBox.shrink();
 
+    final badge = _badgeBody(style);
+    if (widget.lite) {
+      return IgnorePointer(child: badge);
+    }
+
+    final pulse = _pulse!;
     final scale = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.82, end: 1.06), weight: 55),
       TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.0), weight: 45),
-    ]).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeOutCubic));
+    ]).animate(CurvedAnimation(parent: pulse, curve: Curves.easeOutCubic));
 
     return IgnorePointer(
       child: AnimatedBuilder(
-        animation: _pulse,
+        animation: pulse,
         builder: (context, child) => Transform.scale(scale: scale.value, child: child),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 420),
@@ -461,17 +494,32 @@ class _HeroCategoryBadgeState extends State<_HeroCategoryBadge> with SingleTicke
               ),
             );
           },
-          child: Container(
-            key: ValueKey(widget.category),
-            padding: EdgeInsets.symmetric(
-              horizontal: widget.compact ? 12 : 16,
-              vertical: widget.compact ? 8 : 10,
-            ),
-            decoration: BoxDecoration(
-              gradient: style.gradient,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.white.withValues(alpha: 0.35), width: 1.2),
-              boxShadow: [
+          child: badge,
+        ),
+      ),
+    );
+  }
+
+  Widget _badgeBody(({String label, IconData icon, Gradient gradient}) style) {
+    return Container(
+      key: ValueKey(widget.category),
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.compact ? 12 : 16,
+        vertical: widget.compact ? 8 : 10,
+      ),
+      decoration: BoxDecoration(
+        gradient: style.gradient,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.white.withValues(alpha: 0.35), width: 1.2),
+        boxShadow: widget.lite
+            ? [
+                BoxShadow(
+                  color: AppColors.ink.withValues(alpha: 0.2),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : [
                 BoxShadow(
                   color: AppColors.ink.withValues(alpha: 0.28),
                   blurRadius: 18,
@@ -479,35 +527,34 @@ class _HeroCategoryBadgeState extends State<_HeroCategoryBadge> with SingleTicke
                 ),
                 ...AppColors.glowShadow(AppColors.coral, blur: 24),
               ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.white.withValues(alpha: 0.22),
+              shape: BoxShape.circle,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: AppColors.white.withValues(alpha: 0.22),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(6),
-                    child: Icon(style.icon, color: AppColors.white, size: widget.compact ? 18 : 22),
-                  ),
-                ),
-                SizedBox(width: widget.compact ? 8 : 10),
-                Text(
-                  style.label.toUpperCase(),
-                  style: TextStyle(
-                    color: AppColors.white,
-                    fontSize: widget.compact ? 13 : 15,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.1,
-                    shadows: const [Shadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 2))],
-                  ),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(style.icon, color: AppColors.white, size: widget.compact ? 18 : 22),
             ),
           ),
-        ),
+          SizedBox(width: widget.compact ? 8 : 10),
+          Text(
+            style.label.toUpperCase(),
+            style: TextStyle(
+              color: AppColors.white,
+              fontSize: widget.compact ? 13 : 15,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.1,
+              shadows: widget.lite
+                  ? null
+                  : const [Shadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 2))],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -517,12 +564,15 @@ class _SlidePage extends StatefulWidget {
   final TopSliderSlide slide;
   final HeroSliderSize sliderSize;
   final bool isActive;
+  final bool loadImage;
   final VoidCallback onTap;
 
   const _SlidePage({
+    super.key,
     required this.slide,
     required this.sliderSize,
     required this.isActive,
+    this.loadImage = true,
     required this.onTap,
   });
 
@@ -562,39 +612,17 @@ class _SlidePageState extends State<_SlidePage> with SingleTickerProviderStateMi
   }
 
   Widget _slideImage() {
-    final error = DecoratedBox(
-      decoration: BoxDecoration(gradient: AppColors.heroGradient),
-      child: Center(child: Icon(Icons.image_outlined, color: AppColors.white.withValues(alpha: 0.6), size: 40)),
-    );
+    if (!widget.loadImage) {
+      return SizedBox.expand(child: DecoratedBox(decoration: BoxDecoration(gradient: AppColors.heroGradient)));
+    }
 
-    final cacheWidth = HeroSliderSettings.uploadMaxWidth(widget.sliderSize);
+    final cacheWidth = HeroSliderSettings.displayCacheWidth(widget.sliderSize);
 
     return SizedBox.expand(
-      child: Image.network(
-        widget.slide.imageUrl,
+      child: ProductNetworkImage(
+        url: widget.slide.imageUrl,
         fit: BoxFit.cover,
-        alignment: Alignment.center,
-        gaplessPlayback: true,
-        filterQuality: FilterQuality.medium,
-        cacheWidth: cacheWidth,
-        // Web: native <img> avoids CORS fetch failures from Firebase Storage URLs.
-        webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
-        errorBuilder: (_, __, err) {
-          debugPrint('Hero slide failed (${widget.slide.imageUrl}): $err');
-          return error;
-        },
-        loadingBuilder: kIsWeb
-            ? null
-            : (context, child, progress) {
-                if (progress == null) return child;
-                return const Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white),
-                  ),
-                );
-              },
+        cacheWidth: kIsWeb ? null : cacheWidth,
       ),
     );
   }

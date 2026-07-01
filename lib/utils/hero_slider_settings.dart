@@ -1,3 +1,5 @@
+import 'web_platform.dart';
+
 /// Display and upload settings for the dashboard hero carousel.
 class HeroSliderSettings {
   /// Viewport width at or above this uses wide banners (matches dashboard `isWide`).
@@ -52,6 +54,12 @@ class HeroSliderSettings {
 
   static double displayHeight({required bool isWideLayout}) {
     return isWideLayout ? webDisplayHeight : mobileDisplayHeight;
+  }
+
+  static int displayCacheWidth(HeroSliderSize size) {
+    final base = uploadMaxWidth(size);
+    if (WebPlatform.isMobileWeb) return (base * 0.55).round().clamp(400, base);
+    return base;
   }
 
   static HeroSliderSize sizeForLayout({required bool isWideLayout}) {

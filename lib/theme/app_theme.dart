@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -120,10 +121,39 @@ class AppTheme {
     );
   }
 
-  static TextStyle bodyFont({required bool isArabic}) =>
-      isArabic ? GoogleFonts.cairo() : GoogleFonts.outfit();
+  static TextStyle bodyFont({required bool isArabic}) {
+    // Web: bundled Google Fonts are not shipped; runtime fetch is disabled in main.dart.
+    if (kIsWeb) {
+      return TextStyle(
+        fontFamily: isArabic ? 'Geeza Pro' : 'Segoe UI',
+        fontFamilyFallback: isArabic
+            ? const ['Cairo', 'Noto Naskh Arabic', 'Tahoma', 'Arial']
+            : const ['system-ui', 'Roboto', 'Helvetica Neue', 'Arial'],
+      );
+    }
+    return isArabic ? GoogleFonts.cairo() : GoogleFonts.outfit();
+  }
 
   static ThemeData _applyFonts(ThemeData base, {required bool isArabic}) {
+    if (kIsWeb) {
+      final family = bodyFont(isArabic: isArabic);
+      final textTheme = base.textTheme.apply(bodyColor: AppColors.ink, displayColor: AppColors.ink, fontFamily: family.fontFamily);
+      return base.copyWith(
+        textTheme: textTheme,
+        primaryTextTheme: textTheme,
+        appBarTheme: base.appBarTheme.copyWith(
+          titleTextStyle: textTheme.titleLarge?.copyWith(
+            color: AppColors.ink,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        inputDecorationTheme: base.inputDecorationTheme.copyWith(
+          hintStyle: textTheme.bodyMedium?.copyWith(color: AppColors.inkMuted),
+          labelStyle: textTheme.bodyMedium,
+        ),
+      );
+    }
+
     final textTheme = isArabic
         ? GoogleFonts.cairoTextTheme(base.textTheme)
         : GoogleFonts.outfitTextTheme(base.textTheme);

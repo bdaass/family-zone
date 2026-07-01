@@ -8,6 +8,7 @@ import '../models/product_catalog.dart';
 import '../services/favorite_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_image_settings.dart';
+import 'product_image_carousel.dart';
 
 class FavoritesSheet extends StatelessWidget {
   const FavoritesSheet({super.key});
@@ -208,16 +209,11 @@ class _FavoriteListTileState extends State<_FavoriteListTile> {
                       color: AppColors.creamDark,
                       child: Icon(Icons.image_outlined, color: AppColors.inkMuted),
                     )
-                  : Image.network(
-                      widget.imageUrl,
+                  : ProductNetworkImage(
+                      url: widget.imageUrl,
                       fit: BoxFit.cover,
                       cacheWidth: ProductImageSettings.displayCacheSize,
                       cacheHeight: ProductImageSettings.displayCacheSize,
-                      webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
-                      errorBuilder: (_, __, ___) => const ColoredBox(
-                        color: AppColors.creamDark,
-                        child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted),
-                      ),
                     ),
             ),
           ),

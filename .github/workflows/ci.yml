@@ -27,4 +27,6 @@ jobs:
         run: flutter test
 
       - name: Build web
-        run: flutter build web --pwa-strategy=none --no-web-resources-cdn --no-wasm-dry-run
+        run: |
+          flutter build web --release --wasm --pwa-strategy=none --no-web-resources-cdn
+          bash scripts/patch_web_build.sh
