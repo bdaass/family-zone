@@ -414,6 +414,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           sex: audience.sex,
           type: (data['type'] ?? 'clothes').toString(),
           imageUrls: ProductCatalog.productImageUrlsFrom(data),
+          initialImageColorByUrl: ProductCatalog.imageColorByUrlFrom(data),
           hasBarcode: ProductCatalog.hasBarcodeImage(data),
           barcodeImageUrl: userRole == 'admin' ? ProductCatalog.barcodeImageUrlFrom(data) : null,
           showBarcodePreview: userRole == 'admin',
@@ -447,10 +448,20 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           deleteRemoved: !deferImageDeletes,
         );
         final existingBarcode = ProductCatalog.barcodeImageUrlFrom(data);
+        final mergedColors = ProductCatalog.mergeImageColorsAfterUpload(
+          appliedUrls: applied.imageUrls,
+          keptUrls: imageUpdate.keptImageUrls,
+          colorByKeptUrl: imageUpdate.colorByKeptUrl,
+          colorsForNewImages: imageUpdate.colorsForNewImages,
+        );
         result.addAll(ProductCatalog.imageFieldsForWrite(
           imageUrls: applied.imageUrls,
           barcodeImageUrl: applied.barcodeUrl ?? existingBarcode,
+          imageColorByUrl: mergedColors,
         ));
+        if (mergedColors.isEmpty && ProductCatalog.imageColorByUrlFrom(data).isNotEmpty) {
+          result['imageColors'] = FieldValue.delete();
+        }
         if (deferImageDeletes && imageUpdate.removedImageUrls.isNotEmpty) {
           result['pendingImageRemovedUrls'] = imageUpdate.removedImageUrls;
         }
@@ -696,6 +707,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       showStaffNotes: _isStaff,
       imageUrl: ProductCatalog.primaryImageUrl(data),
       imageUrls: imageUrls,
+      imageColorByUrl: ProductCatalog.imageColorByUrlFrom(data),
       barcodeImageUrl: userRole == 'admin' ? ProductCatalog.barcodeImageUrlFrom(data) : null,
       showBarcodeImage: userRole == 'admin',
       sizeField: ProductCatalog.sizeFrom(data),

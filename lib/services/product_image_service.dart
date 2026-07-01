@@ -8,6 +8,8 @@ class ProductImageUpdate {
   final List<Uint8List> newImages;
   final Uint8List? newBarcodeImage;
   final bool hadBarcode;
+  final Map<String, String> colorByKeptUrl;
+  final List<String?> colorsForNewImages;
 
   const ProductImageUpdate({
     required this.keptImageUrls,
@@ -15,6 +17,8 @@ class ProductImageUpdate {
     this.newImages = const [],
     this.newBarcodeImage,
     this.hadBarcode = false,
+    this.colorByKeptUrl = const {},
+    this.colorsForNewImages = const [],
   });
 }
 

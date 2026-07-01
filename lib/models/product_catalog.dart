@@ -455,16 +455,76 @@ class ProductCatalog {
 
   static bool hasBarcodeImage(Map<String, dynamic> data) => barcodeImageUrlFrom(data) != null;
 
+  /// Optional map of product photo URL → catalog color name (English storage, e.g. `Green`).
+  static Map<String, String> imageColorByUrlFrom(Map<String, dynamic> data) {
+    final raw = data['imageColors'];
+    if (raw is! Map) return {};
+    final out = <String, String>{};
+    for (final entry in raw.entries) {
+      final url = entry.key.toString().trim();
+      final color = entry.value?.toString().trim() ?? '';
+      if (url.isNotEmpty && color.isNotEmpty) out[url] = color;
+    }
+    return out;
+  }
+
+  static bool colorsMatch(String a, String b) =>
+      a.trim().toLowerCase() == b.trim().toLowerCase();
+
+  /// First carousel index tagged with [selectedColor], or null when none.
+  static int? imageIndexForColor(
+    List<String> imageUrls,
+    Map<String, String> imageColorByUrl,
+    String selectedColor,
+  ) {
+    if (selectedColor.trim().isEmpty || imageColorByUrl.isEmpty) return null;
+    for (var i = 0; i < imageUrls.length; i++) {
+      final tagged = imageColorByUrl[imageUrls[i]];
+      if (tagged != null && colorsMatch(tagged, selectedColor)) return i;
+    }
+    return null;
+  }
+
+  /// Builds `imageColors` after upload — keeps tags on kept URLs, applies tags to new photos.
+  static Map<String, String> mergeImageColorsAfterUpload({
+    required List<String> appliedUrls,
+    required List<String> keptUrls,
+    required Map<String, String> colorByKeptUrl,
+    required List<String?> colorsForNewImages,
+  }) {
+    final keptSet = keptUrls.toSet();
+    final merged = <String, String>{};
+    var newIdx = 0;
+    for (final url in appliedUrls) {
+      final keptColor = colorByKeptUrl[url];
+      if (keptColor != null && keptColor.trim().isNotEmpty) {
+        merged[url] = keptColor.trim();
+        continue;
+      }
+      if (!keptSet.contains(url)) {
+        if (newIdx < colorsForNewImages.length) {
+          final color = colorsForNewImages[newIdx]?.trim();
+          if (color != null && color.isNotEmpty) merged[url] = color;
+        }
+        newIdx++;
+      }
+    }
+    return merged;
+  }
+
   static Map<String, dynamic> imageFieldsForWrite({
     required List<String> imageUrls,
     String? barcodeImageUrl,
+    Map<String, String>? imageColorByUrl,
   }) {
     final urls = imageUrls.where((u) => u.trim().isNotEmpty).toList();
+    final colors = imageColorByUrl ?? const {};
     return {
       'imageUrls': urls,
       if (urls.isNotEmpty) 'imageUrl': urls.first,
       if (barcodeImageUrl != null && barcodeImageUrl.trim().isNotEmpty)
         'barcodeImageUrl': barcodeImageUrl.trim(),
+      if (colors.isNotEmpty) 'imageColors': colors,
     };
   }
 

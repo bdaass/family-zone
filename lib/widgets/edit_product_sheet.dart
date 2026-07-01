@@ -31,6 +31,7 @@ class EditProductSheet extends StatefulWidget {
   final String type;
   final VariantInventoryMap variantInventory;
   final List<String> imageUrls;
+  final Map<String, String> initialImageColorByUrl;
   final bool hasBarcode;
   final String? barcodeImageUrl;
   final bool showBarcodePreview;
@@ -54,6 +55,7 @@ class EditProductSheet extends StatefulWidget {
     required this.type,
     this.variantInventory = const {},
     this.imageUrls = const [],
+    this.initialImageColorByUrl = const {},
     this.hasBarcode = false,
     this.barcodeImageUrl,
     this.showBarcodePreview = false,
@@ -81,6 +83,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
   List<Uint8List> _newProductImages = [];
   List<String> _removedImageUrls = [];
   Uint8List? _barcodeImage;
+  Map<String, String> _colorByKeptUrl = {};
+  List<String?> _colorsForNewImages = [];
 
   @override
   void initState() {
@@ -111,6 +115,26 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _sex = ProductCatalog.normalizeSex(widget.sex);
     _type = ProductCatalog.normalizeType(widget.type);
     if (!ProductCatalog.types.contains(_type)) _type = 'clothes';
+  }
+
+  List<String> _imageColorOptions() {
+    final seen = <String>{};
+    final out = <String>[];
+    void add(String raw) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) return;
+      final key = trimmed.toLowerCase();
+      if (!seen.add(key)) return;
+      out.add(trimmed);
+    }
+
+    for (final color in ProductCatalog.colorsFromField(widget.colors)) {
+      add(color);
+    }
+    for (final color in VariantInventory.uniqueColors(_variantInventory)) {
+      add(color);
+    }
+    return out;
   }
 
   @override
@@ -229,6 +253,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
       newImages: _newProductImages,
       newBarcodeImage: _barcodeImage,
       hadBarcode: widget.hasBarcode || _barcodeImage != null,
+      colorByKeptUrl: _colorByKeptUrl,
+      colorsForNewImages: _colorsForNewImages,
     );
     Navigator.pop(context, result);
   }
@@ -299,6 +325,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
               children: [
                 ProductImagesField(
                   initialImageUrls: widget.imageUrls,
+                  initialImageColorByUrl: widget.initialImageColorByUrl,
+                  availableColors: _imageColorOptions(),
                   hasExistingBarcode: widget.hasBarcode,
                   existingBarcodeUrl: widget.barcodeImageUrl,
                   storageProductId: widget.productId,
@@ -307,6 +335,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
                   onNewImagesChanged: (images) => _newProductImages = images,
                   onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
                   onRemovedUrlsChanged: (urls) => _removedImageUrls = urls,
+                  onColorByKeptUrlChanged: (map) => _colorByKeptUrl = map,
+                  onColorsForNewImagesChanged: (colors) => _colorsForNewImages = colors,
                 ),
               ],
             ),
@@ -317,7 +347,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
               children: [
                 VariantInventoryField(
                   initialInventory: _variantInventory,
-                  onChanged: (values) => _variantInventory = values,
+                  onChanged: (values) => setState(() => _variantInventory = values),
                 ),
               ],
             ),

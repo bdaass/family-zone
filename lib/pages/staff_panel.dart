@@ -40,6 +40,7 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
 
   List<String> _keptImageUrls = [];
   List<Uint8List> _newProductImages = [];
+  List<String?> _colorsForNewImages = [];
   Uint8List? _barcodeImage;
   VariantInventoryMap _variantInventory = VariantInventory.empty();
   Set<String> _variantInventoryAcknowledged = {};
@@ -51,6 +52,8 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
   String? _formType;
 
   bool get _strictForm => widget.userRole == 'employee';
+
+  List<String> get _photoColorOptions => VariantInventory.uniqueColors(_variantInventory);
 
   @override
   void initState() {
@@ -168,6 +171,12 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
         ...ProductCatalog.imageFieldsForWrite(
           imageUrls: uploaded.imageUrls,
           barcodeImageUrl: uploaded.barcodeUrl,
+          imageColorByUrl: ProductCatalog.mergeImageColorsAfterUpload(
+            appliedUrls: uploaded.imageUrls,
+            keptUrls: const [],
+            colorByKeptUrl: const {},
+            colorsForNewImages: _colorsForNewImages,
+          ),
         ),
         'season': season,
         'ageGroup': ageGroup,
@@ -330,22 +339,6 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
             ],
           ),
           StaffFormSection(
-            title: S.of('staff_section_media'),
-            icon: Icons.photo_library_outlined,
-            accent: AppColors.violet,
-            dense: true,
-            children: [
-              ProductImagesField(
-                key: ValueKey('photos_$_productImagesKey'),
-                dense: true,
-                onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
-                onNewImagesChanged: (images) => _newProductImages = images,
-                onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
-                onRemovedUrlsChanged: (_) {},
-              ),
-            ],
-          ),
-          StaffFormSection(
             title: S.of('staff_section_inventory'),
             icon: Icons.storefront_outlined,
             accent: AppColors.gold,
@@ -355,9 +348,28 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
                 key: ValueKey('variant_inventory_$_variantInventoryKey'),
                 dense: true,
                 requireExplicitChoice: _strictForm,
-                onChanged: (values) => _variantInventory = values,
+                onChanged: (values) => setState(() => _variantInventory = values),
                 onAcknowledgedBranchesChanged: (ack) =>
                     setState(() => _variantInventoryAcknowledged = ack),
+              ),
+            ],
+          ),
+          StaffFormSection(
+            title: S.of('staff_section_media'),
+            icon: Icons.photo_library_outlined,
+            accent: AppColors.violet,
+            dense: true,
+            children: [
+              ProductImagesField(
+                key: ValueKey('photos_$_productImagesKey'),
+                dense: true,
+                availableColors: _photoColorOptions,
+                onKeptUrlsChanged: (urls) => _keptImageUrls = urls,
+                onNewImagesChanged: (images) => _newProductImages = images,
+                onBarcodeImageChanged: (bytes) => _barcodeImage = bytes,
+                onRemovedUrlsChanged: (_) {},
+                onColorByKeptUrlChanged: (_) {},
+                onColorsForNewImagesChanged: (colors) => _colorsForNewImages = colors,
               ),
             ],
           ),

@@ -23,6 +23,7 @@ class ProductDetailSheet extends StatefulWidget {
   final bool showStaffNotes;
   final String imageUrl;
   final List<String> imageUrls;
+  final Map<String, String> imageColorByUrl;
   final String? barcodeImageUrl;
   final bool showBarcodeImage;
   final String sizeField;
@@ -55,6 +56,7 @@ class ProductDetailSheet extends StatefulWidget {
     this.showStaffNotes = false,
     required this.imageUrl,
     this.imageUrls = const [],
+    this.imageColorByUrl = const {},
     this.barcodeImageUrl,
     this.showBarcodeImage = false,
     required this.sizeField,
@@ -88,6 +90,7 @@ class ProductDetailSheet extends StatefulWidget {
     bool showStaffNotes = false,
     required String imageUrl,
     List<String> imageUrls = const [],
+    Map<String, String> imageColorByUrl = const {},
     String? barcodeImageUrl,
     bool showBarcodeImage = false,
     required String sizeField,
@@ -119,6 +122,7 @@ class ProductDetailSheet extends StatefulWidget {
       showStaffNotes: showStaffNotes,
       imageUrl: imageUrl,
       imageUrls: imageUrls,
+      imageColorByUrl: imageColorByUrl,
       barcodeImageUrl: barcodeImageUrl,
       showBarcodeImage: showBarcodeImage,
       sizeField: sizeField,
@@ -201,6 +205,7 @@ class ProductDetailSheet extends StatefulWidget {
 
 class _ProductDetailSheetState extends State<ProductDetailSheet> {
   late bool _isFavorited;
+  int? _focusImageIndex;
 
   @override
   void initState() {
@@ -220,6 +225,13 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   void _toggleFavorite() {
     widget.onFavoriteToggle?.call();
     setState(() => _isFavorited = !_isFavorited);
+  }
+
+  void _onShopColorSelected(String color) {
+    final urls = widget.imageUrls.isNotEmpty ? widget.imageUrls : [widget.imageUrl];
+    final index = ProductCatalog.imageIndexForColor(urls, widget.imageColorByUrl, color);
+    if (index == null) return;
+    setState(() => _focusImageIndex = index);
   }
 
   @override
@@ -310,6 +322,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 imageUrls: widget.imageUrls.isNotEmpty ? widget.imageUrls : [widget.imageUrl],
                 interactive: true,
                 showIndicators: true,
+                focusIndex: _focusImageIndex,
               ),
             ),
             ..._buildLeftBadges(),
@@ -402,6 +415,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             price: widget.price,
             soldPrice: widget.soldPrice,
             variantInventory: widget.variantInventory,
+            onColorSelected: _onShopColorSelected,
             onAdded: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(S.of('added_to_cart'))),

@@ -21,6 +21,7 @@ class ProductVariantPicker extends StatefulWidget {
     this.soldPrice,
     this.variantInventory = const {},
     this.onAdded,
+    this.onColorSelected,
   });
 
   final String productDocId;
@@ -33,6 +34,7 @@ class ProductVariantPicker extends StatefulWidget {
   final double? soldPrice;
   final VariantInventoryMap variantInventory;
   final VoidCallback? onAdded;
+  final ValueChanged<String>? onColorSelected;
 
   @override
   State<ProductVariantPicker> createState() => _ProductVariantPickerState();
@@ -104,6 +106,7 @@ class _ProductVariantPickerState extends State<ProductVariantPicker> {
       }
       if (_quantity > _maxQuantity) _quantity = _maxQuantity;
     });
+    widget.onColorSelected?.call(color);
   }
 
   void _onSizeSelected(String size) {

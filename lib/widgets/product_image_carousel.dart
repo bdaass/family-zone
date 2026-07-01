@@ -1,12 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-import '../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_image_settings.dart';
+import '../utils/web_platform.dart';
 
 /// Single product photo for grids and lists (no carousel timers).
 class ProductThumbnail extends StatelessWidget {
@@ -26,7 +24,12 @@ class ProductThumbnail extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        ProductNetworkImage(url: imageUrl, fit: fit),
+        ProductNetworkImage(
+          url: imageUrl,
+          fit: fit,
+          cacheWidth: ProductImageSettings.displayCacheSize,
+          cacheHeight: ProductImageSettings.displayCacheSize,
+        ),
         if (extraPhotoCount > 0)
           Positioned(
             right: 10,
@@ -59,7 +62,7 @@ class ProductThumbnail extends StatelessWidget {
   }
 }
 
-/// Cycles through product photos (public images only — no barcode).
+/// Product photos — swipeable carousel when [interactive] and multiple URLs.
 class ProductImageCarousel extends StatefulWidget {
   final List<String> imageUrls;
   final bool autoPlay;
@@ -67,6 +70,7 @@ class ProductImageCarousel extends StatefulWidget {
   final BoxFit fit;
   final bool showIndicators;
   final bool interactive;
+  final int? focusIndex;
 
   const ProductImageCarousel({
     super.key,
@@ -76,6 +80,7 @@ class ProductImageCarousel extends StatefulWidget {
     this.fit = BoxFit.cover,
     this.showIndicators = false,
     this.interactive = false,
+    this.focusIndex,
   });
 
   @override
@@ -85,30 +90,53 @@ class ProductImageCarousel extends StatefulWidget {
 class _ProductImageCarouselState extends State<ProductImageCarousel> {
   Timer? _timer;
   int _index = 0;
-  late PageController? _pageController;
+  PageController? _pageController;
 
   List<String> get _urls => widget.imageUrls.where((u) => u.trim().isNotEmpty).toList();
+
+  bool get _canSwipe => widget.interactive && _urls.length > 1;
+
+  int get _detailCacheSize => ProductImageSettings.detailCacheSize;
 
   @override
   void initState() {
     super.initState();
-    _pageController = widget.interactive ? PageController() : null;
+    if (_canSwipe) _pageController = PageController();
     _startAutoPlay();
   }
 
   @override
   void didUpdateWidget(ProductImageCarousel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final couldSwipe = oldWidget.interactive &&
+        oldWidget.imageUrls.where((u) => u.trim().isNotEmpty).length > 1;
+    if (_canSwipe && !couldSwipe) {
+      _pageController ??= PageController();
+    } else if (!_canSwipe && couldSwipe) {
+      _pageController?.dispose();
+      _pageController = null;
+    }
+
     if (oldWidget.imageUrls != widget.imageUrls || oldWidget.autoPlay != widget.autoPlay) {
       _index = 0;
-      _pageController?.jumpToPage(0);
+      if (_pageController?.hasClients == true) {
+        _pageController!.jumpToPage(0);
+      }
       _restartAutoPlay();
+    } else if (widget.focusIndex != null &&
+        widget.focusIndex != oldWidget.focusIndex &&
+        widget.focusIndex! >= 0 &&
+        widget.focusIndex! < _urls.length) {
+      _index = widget.focusIndex!;
+      if (_pageController?.hasClients == true) {
+        _pageController!.jumpToPage(_index);
+      }
     }
   }
 
   void _startAutoPlay() {
     _timer?.cancel();
-    if (!widget.autoPlay || _urls.length < 2) return;
+    if (!widget.autoPlay || _urls.length < 2 || WebPlatform.isMobileWeb) return;
     _timer = Timer.periodic(widget.interval, (_) {
       if (!mounted || _urls.length < 2) return;
       setState(() => _index = (_index + 1) % _urls.length);
@@ -127,41 +155,6 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
     _startAutoPlay();
   }
 
-  void _goToPage(int page) {
-    if (page < 0 || page >= _urls.length) return;
-    setState(() => _index = page);
-    if (_pageController?.hasClients == true) {
-      _pageController!.animateToPage(
-        page,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
-  void _previous() {
-    if (_urls.length < 2) return;
-    _goToPage((_index - 1 + _urls.length) % _urls.length);
-  }
-
-  void _next() {
-    if (_urls.length < 2) return;
-    _goToPage((_index + 1) % _urls.length);
-  }
-
-  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || _urls.length < 2) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _previous();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      _next();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   @override
   void dispose() {
     _timer?.cancel();
@@ -169,133 +162,87 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
     super.dispose();
   }
 
+  Widget _carouselImage(String url) {
+    return ProductNetworkImage(
+      url: url,
+      fit: widget.fit,
+      cacheWidth: _detailCacheSize,
+      cacheHeight: _detailCacheSize,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_urls.isEmpty) {
-      return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 32));
-    }
-
-    if (widget.interactive) {
-      final multi = _urls.length > 1;
-      return Focus(
-        autofocus: kIsWeb && multi,
-        onKeyEvent: _handleKey,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            PageView.builder(
-              controller: _pageController,
-              itemCount: _urls.length,
-              onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (context, i) => ProductNetworkImage(url: _urls[i], fit: widget.fit),
-            ),
-            if (multi) ...[
-              _navButton(
-                context: context,
-                tooltip: S.of('carousel_prev'),
-                icon: Icons.chevron_left_rounded,
-                onTap: _previous,
-                atStart: true,
-              ),
-              _navButton(
-                context: context,
-                tooltip: S.of('carousel_next'),
-                icon: Icons.chevron_right_rounded,
-                onTap: _next,
-                atStart: false,
-              ),
-            ],
-            if (widget.showIndicators && multi) _dots(interactive: true),
-          ],
-        ),
+    final urls = _urls;
+    if (urls.isEmpty) {
+      return const ColoredBox(
+        color: AppColors.creamDark,
+        child: Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 32)),
       );
     }
+
+    if (!_canSwipe) {
+      return _carouselImage(urls.first);
+    }
+
+    final lazyLoad = WebPlatform.isMobileWeb;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 500),
-          child: ProductNetworkImage(
-            key: ValueKey(_urls[_index]),
-            url: _urls[_index],
-            fit: widget.fit,
-          ),
+        PageView.builder(
+          controller: _pageController,
+          clipBehavior: Clip.hardEdge,
+          itemCount: urls.length,
+          onPageChanged: (i) {
+            setState(() => _index = i);
+            WebPlatform.trimImageCacheIfNeeded();
+          },
+          itemBuilder: (context, i) {
+            if (lazyLoad && i != _index) {
+              return const ColoredBox(color: AppColors.creamDark);
+            }
+            return _carouselImage(urls[i]);
+          },
         ),
-        if (widget.showIndicators && _urls.length > 1) _dots(interactive: false),
+        if (widget.showIndicators)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 10,
+            child: _CarouselDotIndicator(count: urls.length, index: _index),
+          ),
       ],
     );
   }
+}
 
-  Widget _navButton({
-    required BuildContext context,
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback onTap,
-    required bool atStart,
-  }) {
-    return Positioned.directional(
-      textDirection: Directionality.of(context),
-      start: atStart ? 8 : null,
-      end: atStart ? null : 8,
-      top: 0,
-      bottom: 0,
-      child: Center(
-        child: Tooltip(
-          message: tooltip,
-          child: Material(
-            color: AppColors.ink.withValues(alpha: 0.5),
-            shape: const CircleBorder(),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Icon(
-                  icon,
-                  color: AppColors.white,
-                  size: 26,
-                  semanticLabel: tooltip,
-                ),
-              ),
-            ),
+class _CarouselDotIndicator extends StatelessWidget {
+  final int count;
+  final int index;
+
+  const _CarouselDotIndicator({required this.count, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(count, (i) {
+        final active = i == index;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: active ? 16 : 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: active ? AppColors.white : AppColors.white.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: active
+                ? [BoxShadow(color: AppColors.ink.withValues(alpha: 0.35), blurRadius: 4)]
+                : null,
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _dots({required bool interactive}) {
-    return Positioned(
-      bottom: 10,
-      left: 0,
-      right: 0,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(_urls.length, (i) {
-          final active = i == _index;
-          final dot = AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            width: active ? 8 : 6,
-            height: active ? 8 : 6,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: active ? AppColors.white : AppColors.white.withValues(alpha: 0.55),
-              boxShadow: active ? AppColors.elevationShadow(opacity: 0.2, blur: 4, y: 1) : null,
-            ),
-          );
-          if (!interactive) return dot;
-          return GestureDetector(
-            onTap: () => _goToPage(i),
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: dot,
-            ),
-          );
-        }),
-      ),
+        );
+      }),
     );
   }
 }
@@ -303,13 +250,15 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
 class ProductNetworkImage extends StatelessWidget {
   final String url;
   final BoxFit fit;
-  final int? cacheSize;
+  final int? cacheWidth;
+  final int? cacheHeight;
 
   const ProductNetworkImage({
     super.key,
     required this.url,
     required this.fit,
-    this.cacheSize,
+    this.cacheWidth,
+    this.cacheHeight,
   });
 
   @override
@@ -317,32 +266,20 @@ class ProductNetworkImage extends StatelessWidget {
     if (url.trim().isEmpty) {
       return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 32));
     }
-    final decodedSize = cacheSize ?? ProductImageSettings.displayCacheSize;
+
     return Image.network(
       url,
       fit: fit,
       alignment: Alignment.topCenter,
       width: double.infinity,
       height: double.infinity,
-      cacheWidth: decodedSize,
-      cacheHeight: decodedSize,
-      webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
+      filterQuality: WebPlatform.networkImageQuality,
+      webHtmlElementStrategy: WebPlatform.networkImageStrategy,
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Product image load failed: $error');
         return const Center(child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 32));
-      },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        if (kIsWeb) {
-          return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 28));
-        }
-        return const Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral),
-          ),
-        );
       },
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../l10n/app_strings.dart';
+import '../models/product_catalog.dart';
 import '../services/product_image_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/image_compressor.dart';
@@ -12,6 +13,8 @@ import 'product_image_carousel.dart';
 /// Staff product photos + mandatory barcode capture (barcode preview admin-only on edit).
 class ProductImagesField extends StatefulWidget {
   final List<String> initialImageUrls;
+  final Map<String, String> initialImageColorByUrl;
+  final List<String> availableColors;
   final bool hasExistingBarcode;
   final String? existingBarcodeUrl;
   final String? storageProductId;
@@ -21,10 +24,14 @@ class ProductImagesField extends StatefulWidget {
   final ValueChanged<List<Uint8List>> onNewImagesChanged;
   final ValueChanged<Uint8List?> onBarcodeImageChanged;
   final ValueChanged<List<String>> onRemovedUrlsChanged;
+  final ValueChanged<Map<String, String>> onColorByKeptUrlChanged;
+  final ValueChanged<List<String?>> onColorsForNewImagesChanged;
 
   const ProductImagesField({
     super.key,
     this.initialImageUrls = const [],
+    this.initialImageColorByUrl = const {},
+    this.availableColors = const [],
     this.hasExistingBarcode = false,
     this.existingBarcodeUrl,
     this.storageProductId,
@@ -34,6 +41,8 @@ class ProductImagesField extends StatefulWidget {
     required this.onNewImagesChanged,
     required this.onBarcodeImageChanged,
     required this.onRemovedUrlsChanged,
+    required this.onColorByKeptUrlChanged,
+    required this.onColorsForNewImagesChanged,
   });
 
   @override
@@ -45,6 +54,8 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
   late List<String> _keptUrls;
   final List<Uint8List> _newImages = [];
   final List<String> _removedUrls = [];
+  final Map<String, String> _colorByKeptUrl = {};
+  final List<String?> _newImageColors = [];
   Uint8List? _barcodeBytes;
   bool _isCompressing = false;
 
@@ -52,6 +63,7 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
   void initState() {
     super.initState();
     _keptUrls = List<String>.from(widget.initialImageUrls);
+    _colorByKeptUrl.addAll(widget.initialImageColorByUrl);
     WidgetsBinding.instance.addPostFrameCallback((_) => _notify());
   }
 
@@ -60,6 +72,8 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
     widget.onNewImagesChanged(List<Uint8List>.from(_newImages));
     widget.onBarcodeImageChanged(_barcodeBytes);
     widget.onRemovedUrlsChanged(List<String>.from(_removedUrls));
+    widget.onColorByKeptUrlChanged(Map<String, String>.from(_colorByKeptUrl));
+    widget.onColorsForNewImagesChanged(List<String?>.from(_newImageColors));
   }
 
   Future<ImageSource?> _chooseImageSource() {
@@ -133,6 +147,7 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
       if (!mounted) return;
       setState(() {
         _newImages.addAll(compressed);
+        _newImageColors.addAll(List<String?>.filled(compressed.length, null));
         _isCompressing = false;
       });
       _notify();
@@ -171,13 +186,17 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
   void _removeKeptUrl(String url) {
     setState(() {
       _keptUrls.remove(url);
+      _colorByKeptUrl.remove(url);
       if (!_removedUrls.contains(url)) _removedUrls.add(url);
     });
     _notify();
   }
 
   void _removeNewImage(int index) {
-    setState(() => _newImages.removeAt(index));
+    setState(() {
+      _newImages.removeAt(index);
+      if (index < _newImageColors.length) _newImageColors.removeAt(index);
+    });
     _notify();
   }
 
@@ -205,13 +224,49 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
           ),
         ),
         SizedBox(height: gap),
+        if (widget.availableColors.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              S.of('field_image_color_hint'),
+              style: TextStyle(fontSize: widget.dense ? 10 : 11, color: AppColors.inkMuted, height: 1.35),
+            ),
+          ),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final url in _keptUrls) _thumbNetwork(url, thumb, () => _removeKeptUrl(url)),
+            for (final url in _keptUrls)
+              _thumbWithColor(
+                size: thumb,
+                selectedColor: _colorByKeptUrl[url],
+                onColorChanged: (color) {
+                  setState(() {
+                    if (color == null || color.isEmpty) {
+                      _colorByKeptUrl.remove(url);
+                    } else {
+                      _colorByKeptUrl[url] = color;
+                    }
+                  });
+                  _notify();
+                },
+                thumb: _thumbNetwork(url, thumb, () => _removeKeptUrl(url)),
+              ),
             for (var i = 0; i < _newImages.length; i++)
-              _thumbMemory(_newImages[i], thumb, () => _removeNewImage(i)),
+              _thumbWithColor(
+                size: thumb,
+                selectedColor: i < _newImageColors.length ? _newImageColors[i] : null,
+                onColorChanged: (color) {
+                  setState(() {
+                    while (_newImageColors.length < _newImages.length) {
+                      _newImageColors.add(null);
+                    }
+                    _newImageColors[i] = color;
+                  });
+                  _notify();
+                },
+                thumb: _thumbMemory(_newImages[i], thumb, () => _removeNewImage(i)),
+              ),
             _addTile(thumb, S.of('field_add_photos'), _pickProductImages),
           ],
         ),
@@ -253,6 +308,58 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _thumbWithColor({
+    required double size,
+    required Widget thumb,
+    required String? selectedColor,
+    required ValueChanged<String?> onColorChanged,
+  }) {
+    if (widget.availableColors.isEmpty) return thumb;
+
+    return SizedBox(
+      width: size,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          thumb,
+          const SizedBox(height: 4),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              isDense: true,
+              isExpanded: true,
+              value: selectedColor != null &&
+                      widget.availableColors.any((c) => ProductCatalog.colorsMatch(c, selectedColor))
+                  ? widget.availableColors.firstWhere((c) => ProductCatalog.colorsMatch(c, selectedColor))
+                  : null,
+              hint: Text(
+                S.of('field_image_color_none'),
+                style: TextStyle(fontSize: widget.dense ? 9 : 10, color: AppColors.inkMuted),
+                overflow: TextOverflow.ellipsis,
+              ),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(S.of('field_image_color_none'), style: const TextStyle(fontSize: 11)),
+                ),
+                for (final color in widget.availableColors)
+                  DropdownMenuItem<String?>(
+                    value: color,
+                    child: Text(
+                      ProductCatalog.colorDisplayName(color),
+                      style: const TextStyle(fontSize: 11),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: onColorChanged,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
