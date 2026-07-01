@@ -29,7 +29,7 @@ dependencies:
   google_sign_in: ^6.2.2         # Enables the native Google pop-up sign-in sheet
   url_launcher: ^6.3.1           # WhatsApp checkout links
   package_info_plus: ^8.3.0      # Installed app version for update checks
-  font_awesome_flutter: ^10.8.0  # Social icons in sidebar
+  font_awesome_flutter: ^11.0.0  # v11+ required for Flutter 3.44+ (IconData is final)
   google_fonts: ^6.2.1           # Arabic + Latin UI fonts
   share_plus: ^10.1.4            # Share product links
 
