@@ -33,6 +33,7 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
   late VariantInventoryMap _inventory;
   final Map<String, _BranchInventoryMode> _branchModes = {};
   final Map<String, TextEditingController> _colorControllers = {};
+  final Map<String, FocusNode> _colorFocusNodes = {};
   final Map<String, TextEditingController> _sizeControllers = {};
   final Map<String, TextEditingController> _qtyControllers = {};
   final Map<String, String?> _selectedQuickColor = {};
@@ -46,6 +47,7 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
       _branchModes[branch.id] =
           hasEntries ? _BranchInventoryMode.specified : _BranchInventoryMode.unset;
       _colorControllers[branch.id] = TextEditingController();
+      _colorFocusNodes[branch.id] = FocusNode();
       _sizeControllers[branch.id] = TextEditingController();
       _qtyControllers[branch.id] = TextEditingController();
       _selectedQuickColor[branch.id] = null;
@@ -61,6 +63,9 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
       ..._qtyControllers.values,
     ]) {
       controller.dispose();
+    }
+    for (final node in _colorFocusNodes.values) {
+      node.dispose();
     }
     super.dispose();
   }
@@ -273,7 +278,7 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: S.quickColorNames.map((color) => _quickColorChip(branchId, color)).toList(),
+              children: S.colorSuggestions.map((color) => _quickColorChip(branchId, color)).toList(),
             ),
             const SizedBox(height: 12),
             Text(
@@ -283,6 +288,7 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
             const SizedBox(height: 8),
             RawAutocomplete<String>(
               textEditingController: _colorControllers[branchId],
+              focusNode: _colorFocusNodes[branchId],
               optionsBuilder: (value) {
                 final q = value.text.trim().toLowerCase();
                 if (q.isEmpty) return const Iterable<String>.empty();
@@ -309,6 +315,9 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
                 );
               },
               optionsViewBuilder: (context, onSelected, options) {
+                final optionList = options.toList();
+                if (optionList.isEmpty) return const SizedBox.shrink();
+
                 return Align(
                   alignment: AlignmentDirectional.topStart,
                   child: Material(
@@ -319,16 +328,15 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
                       child: ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
-                        itemCount: options.length,
+                        itemCount: optionList.length,
                         itemBuilder: (context, index) {
-                          final color = options.elementAt(index);
+                          final color = optionList[index];
                           final fill = ProductCatalog.colorSwatchFill(color);
                           return ListTile(
                             dense: true,
                             leading: CircleAvatar(
                               radius: 10,
                               backgroundColor: fill,
-                              child: null,
                             ),
                             title: Text(S.colorName(color), style: const TextStyle(fontWeight: FontWeight.w600)),
                             onTap: () => onSelected(color),

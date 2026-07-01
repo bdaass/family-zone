@@ -440,6 +440,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           (imageUpdate.newImages.isNotEmpty ||
               imageUpdate.newBarcodeImage != null ||
               imageUpdate.removedImageUrls.isNotEmpty);
+      Map<String, String>? mergedImageColors;
 
       if (imageUpdate != null) {
         final applied = await ProductImageService.applyImageUpdate(
@@ -448,7 +449,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           deleteRemoved: !deferImageDeletes,
         );
         final existingBarcode = ProductCatalog.barcodeImageUrlFrom(data);
-        final mergedColors = ProductCatalog.mergeImageColorsAfterUpload(
+        mergedImageColors = ProductCatalog.mergeImageColorsAfterUpload(
           appliedUrls: applied.imageUrls,
           keptUrls: imageUpdate.keptImageUrls,
           colorByKeptUrl: imageUpdate.colorByKeptUrl,
@@ -457,15 +458,20 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         result.addAll(ProductCatalog.imageFieldsForWrite(
           imageUrls: applied.imageUrls,
           barcodeImageUrl: applied.barcodeUrl ?? existingBarcode,
-          imageColorByUrl: mergedColors,
+          imageColorByUrl: mergedImageColors,
         ));
-        if (mergedColors.isEmpty && ProductCatalog.imageColorByUrlFrom(data).isNotEmpty) {
+        if (mergedImageColors.isEmpty && ProductCatalog.imageColorByUrlFrom(data).isNotEmpty) {
           result['imageColors'] = FieldValue.delete();
         }
         if (deferImageDeletes && imageUpdate.removedImageUrls.isNotEmpty) {
           result['pendingImageRemovedUrls'] = imageUpdate.removedImageUrls;
         }
       }
+
+      final priorImageColors = ProductCatalog.imageColorByUrlFrom(data);
+      final mergedColors = mergedImageColors ?? priorImageColors;
+      final imageColorsChanged = !ProductCatalog.imageColorsEqual(mergedColors, priorImageColors);
+      final imageColorTagsOnly = imageColorsChanged && !imagesChanged;
 
       if (ProductPermissions.requiresEditApproval(userRole) && isPublished) {
         if (newProductId != null && newProductId != docId) {
@@ -479,6 +485,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
         if (staffNotesChanged) {
           await ProductWriteService.updateStaffNotes(docId: docId, staffNotes: staffNotes);
+        }
+
+        if (imageColorTagsOnly) {
+          await ProductWriteService.updateImageColors(docId: docId, imageColorByUrl: mergedColors);
+          result.remove('imageColors');
         }
 
         final catalogChanged = ProductWriteService.hasCatalogFieldChanges(

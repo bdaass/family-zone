@@ -53,7 +53,9 @@ class _StaffManagementPanelState extends State<StaffManagementPanel> {
 
   bool get _strictForm => widget.userRole == 'employee';
 
-  List<String> get _photoColorOptions => VariantInventory.uniqueColors(_variantInventory);
+  List<String> get _photoColorOptions => ProductCatalog.imageTagColorOptions(
+        extraColors: VariantInventory.uniqueColors(_variantInventory),
+      );
 
   @override
   void initState() {

@@ -471,6 +471,35 @@ class ProductCatalog {
   static bool colorsMatch(String a, String b) =>
       a.trim().toLowerCase() == b.trim().toLowerCase();
 
+  /// Full palette for staff photo color tags, plus any product/inventory colors.
+  static List<String> imageTagColorOptions({Iterable<String> extraColors = const []}) {
+    final seen = <String>{};
+    final out = <String>[];
+    void add(String raw) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) return;
+      final key = trimmed.toLowerCase();
+      if (!seen.add(key)) return;
+      out.add(trimmed);
+    }
+
+    for (final color in S.colorSuggestions) {
+      add(color);
+    }
+    for (final color in extraColors) {
+      add(color);
+    }
+    return out;
+  }
+
+  static bool imageColorsEqual(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
+
   /// First carousel index tagged with [selectedColor], or null when none.
   static int? imageIndexForColor(
     List<String> imageUrls,

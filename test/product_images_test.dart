@@ -48,5 +48,23 @@ void main() {
         'https://a/2.jpg': 'Green',
       });
     });
+    test('imageTagColorOptions includes full palette and extras', () {
+      final options = ProductCatalog.imageTagColorOptions(extraColors: ['Custom Plum']);
+      expect(options, contains('Black'));
+      expect(options, contains('Green'));
+      expect(options, contains('Turquoise'));
+      expect(options, contains('Custom Plum'));
+    });
+
+    test('imageColorsEqual compares tag maps', () {
+      expect(
+        ProductCatalog.imageColorsEqual({'a': 'Red'}, {'a': 'Red'}),
+        isTrue,
+      );
+      expect(
+        ProductCatalog.imageColorsEqual({'a': 'Red'}, {'a': 'Blue'}),
+        isFalse,
+      );
+    });
   });
 }

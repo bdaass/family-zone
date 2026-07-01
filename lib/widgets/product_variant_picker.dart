@@ -7,7 +7,7 @@ import '../models/variant_inventory.dart';
 import '../services/cart_service.dart';
 import '../theme/app_theme.dart';
 
-/// Size, color, quantity picker with add-to-cart — used in product detail and quick-add sheet.
+/// Color, size, quantity picker with add-to-cart — used in product detail and quick-add sheet.
 class ProductVariantPicker extends StatefulWidget {
   const ProductVariantPicker({
     super.key,
@@ -118,12 +118,12 @@ class _ProductVariantPickerState extends State<ProductVariantPicker> {
 
   Future<void> _add() async {
     if (_saving) return;
-    if (_selectedSize.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('select_size_required'))));
-      return;
-    }
     if (_colors.length > 1 && _selectedColor.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('select_color_required'))));
+      return;
+    }
+    if (_selectedSize.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of('select_size_required'))));
       return;
     }
     if (_usesVariantInventory && _maxQuantity <= 0) {
@@ -158,41 +158,13 @@ class _ProductVariantPickerState extends State<ProductVariantPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final needsColorFirst = _colors.length > 1;
+    final colorReady = !needsColorFirst || _selectedColor.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          _sizes.length > 1 ? S.of('available_sizes') : S.of('size'),
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _sizes.map((size) {
-            final selected = _selectedSize == size;
-            final variantQty = _usesVariantInventory && _selectedColor.isNotEmpty
-                ? VariantInventory.variantTotalQty(
-                    widget.variantInventory,
-                    color: _selectedColor,
-                    size: size,
-                  )
-                : null;
-            final outOfStock = variantQty == 0;
-            return ChoiceChip(
-              label: Text(size),
-              selected: selected,
-              onSelected: outOfStock ? null : (_) => _onSizeSelected(size),
-              selectedColor: AppColors.ink,
-              labelStyle: TextStyle(
-                color: selected ? AppColors.white : AppColors.ink,
-                fontWeight: FontWeight.w700,
-              ),
-            );
-          }).toList(),
-        ),
         if (_colors.isNotEmpty) ...[
-          const SizedBox(height: 20),
           Text(
             _colors.length > 1 ? S.of('available_colors') : S.of('color'),
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
@@ -208,6 +180,39 @@ class _ProductVariantPickerState extends State<ProductVariantPicker> {
                 selected: selected,
                 onSelected: (_) => _onColorSelected(color),
                 selectedColor: AppColors.coral,
+                labelStyle: TextStyle(
+                  color: selected ? AppColors.white : AppColors.ink,
+                  fontWeight: FontWeight.w700,
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+        if (colorReady) ...[
+          const SizedBox(height: 20),
+          Text(
+            _sizes.length > 1 ? S.of('available_sizes') : S.of('size'),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _sizes.map((size) {
+              final selected = _selectedSize == size;
+              final variantQty = _usesVariantInventory && _selectedColor.isNotEmpty
+                  ? VariantInventory.variantTotalQty(
+                      widget.variantInventory,
+                      color: _selectedColor,
+                      size: size,
+                    )
+                  : null;
+              final outOfStock = variantQty == 0;
+              return ChoiceChip(
+                label: Text(size),
+                selected: selected,
+                onSelected: outOfStock ? null : (_) => _onSizeSelected(size),
+                selectedColor: AppColors.ink,
                 labelStyle: TextStyle(
                   color: selected ? AppColors.white : AppColors.ink,
                   fontWeight: FontWeight.w700,

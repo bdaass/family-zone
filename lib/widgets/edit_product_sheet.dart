@@ -118,23 +118,12 @@ class _EditProductSheetState extends State<EditProductSheet> {
   }
 
   List<String> _imageColorOptions() {
-    final seen = <String>{};
-    final out = <String>[];
-    void add(String raw) {
-      final trimmed = raw.trim();
-      if (trimmed.isEmpty) return;
-      final key = trimmed.toLowerCase();
-      if (!seen.add(key)) return;
-      out.add(trimmed);
-    }
-
-    for (final color in ProductCatalog.colorsFromField(widget.colors)) {
-      add(color);
-    }
-    for (final color in VariantInventory.uniqueColors(_variantInventory)) {
-      add(color);
-    }
-    return out;
+    return ProductCatalog.imageTagColorOptions(
+      extraColors: [
+        ...ProductCatalog.colorsFromField(widget.colors),
+        ...VariantInventory.uniqueColors(_variantInventory),
+      ],
+    );
   }
 
   @override

@@ -123,6 +123,12 @@ service cloud.firestore {
       && request.resource.data.staffNotes is string;
   }
 
+  function employeeImageColorsUpdate() {
+    return isEmployee()
+      && isPublishedProduct()
+      && onlyFieldsChanged(['imageColors']);
+  }
+
   function favoriteCountDeltaValid() {
     let oldCount = resource.data.get('favoriteCount', 0);
     let newCount = request.resource.data.favoriteCount;
@@ -169,6 +175,7 @@ service cloud.firestore {
     allow update: if isAdmin()
       || employeePendingEditUpdate()
       || employeeStaffNotesUpdate()
+      || employeeImageColorsUpdate()
       || employeeUnpublishedUpdate()
       || (isSignedIn()
         && onlyFieldsChanged(['favoriteCount'])

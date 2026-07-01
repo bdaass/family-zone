@@ -31,9 +31,8 @@ class ColorInputField extends StatefulWidget {
 
 class _ColorInputFieldState extends State<ColorInputField> {
   final _inputController = TextEditingController();
+  final _inputFocusNode = FocusNode();
   late List<String> _colors;
-
-  static const _quickColors = S.quickColorNames;
 
   @override
   void initState() {
@@ -45,6 +44,7 @@ class _ColorInputFieldState extends State<ColorInputField> {
   @override
   void dispose() {
     _inputController.dispose();
+    _inputFocusNode.dispose();
     super.dispose();
   }
 
@@ -114,7 +114,7 @@ class _ColorInputFieldState extends State<ColorInputField> {
         Wrap(
           spacing: 6,
           runSpacing: 6,
-          children: _quickColors.map((color) {
+          children: S.colorSuggestions.map((color) {
             final added = _colors.any((c) => c.toLowerCase() == color.toLowerCase());
             return ActionChip(
               label: Text(S.colorName(color), style: TextStyle(fontSize: widget.dense ? 10 : 11, fontWeight: FontWeight.w600)),
@@ -127,6 +127,7 @@ class _ColorInputFieldState extends State<ColorInputField> {
         SizedBox(height: gap),
         RawAutocomplete<String>(
           textEditingController: _inputController,
+          focusNode: _inputFocusNode,
           optionsBuilder: (value) {
             final q = value.text.trim().toLowerCase();
             if (q.isEmpty) return const Iterable<String>.empty();
@@ -156,6 +157,9 @@ class _ColorInputFieldState extends State<ColorInputField> {
             );
           },
           optionsViewBuilder: (context, onSelected, options) {
+            final optionList = options.toList();
+            if (optionList.isEmpty) return const SizedBox.shrink();
+
             return Align(
               alignment: AlignmentDirectional.topStart,
               child: Material(
@@ -166,9 +170,9 @@ class _ColorInputFieldState extends State<ColorInputField> {
                   child: ListView.builder(
                     padding: EdgeInsets.zero,
                     shrinkWrap: true,
-                    itemCount: options.length,
+                    itemCount: optionList.length,
                     itemBuilder: (context, index) {
-                      final color = options.elementAt(index);
+                      final color = optionList[index];
                       return ListTile(
                         dense: true,
                         leading: CircleAvatar(

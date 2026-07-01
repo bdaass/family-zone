@@ -77,6 +77,21 @@ class ProductWriteService {
     });
   }
 
+  static Future<void> updateImageColors({
+    required String docId,
+    required Map<String, String> imageColorByUrl,
+  }) async {
+    if (imageColorByUrl.isEmpty) {
+      await FirebaseFirestore.instance.collection('products').doc(docId).update({
+        'imageColors': FieldValue.delete(),
+      });
+      return;
+    }
+    await FirebaseFirestore.instance.collection('products').doc(docId).update({
+      'imageColors': imageColorByUrl,
+    });
+  }
+
   /// True when [proposed] changes catalog fields compared with [current] (excluding staff notes).
   static bool hasCatalogFieldChanges({
     required Map<String, dynamic> proposed,
