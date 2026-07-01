@@ -105,12 +105,20 @@ flutter build appbundle --release
 
 ### Google Play package ID
 
-The app currently uses `com.example.family_zone`. **Google Play rejects `com.example.*` packages.** Before publishing:
+Android still uses `com.example.family_zone` until you register a new Android app in Firebase. **Google Play rejects `com.example.*` packages.** Before publishing Android:
 
-1. Choose a final ID (e.g. `lb.familyzone.app`).
+1. Choose a final ID (e.g. `com.familyzone.shop` — same as iOS, or `lb.familyzone.app`).
 2. Update `applicationId` in `android/app/build.gradle.kts` and move `MainActivity.kt` to the matching package path.
 3. Add the new Android app in Firebase Console and run `flutterfire configure`.
-4. Update iOS bundle ID in Xcode / `AppInfo.xcconfig` if needed.
+
+### iOS bundle ID
+
+The iOS/macOS app uses **`com.familyzone.shop`**. Before building for App Store:
+
+1. Register **com.familyzone.shop** in [Apple Developer](https://developer.apple.com/account/resources/identifiers/list).
+2. In Firebase Console → project **family-zone-2026** → add or update the iOS app with bundle ID **com.familyzone.shop**.
+3. Download **`GoogleService-Info.plist`** into `ios/Runner/`.
+4. Run `flutterfire configure` on a Mac if Firebase options need refreshing.
 
 ## Privacy policy
 

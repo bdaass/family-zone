@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '280621792365',
     projectId: 'family-zone-2026',
     storageBucket: 'family-zone-2026.firebasestorage.app',
-    iosBundleId: 'com.example.familyZone',
+    iosBundleId: 'com.familyzone.shop',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,7 +73,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '280621792365',
     projectId: 'family-zone-2026',
     storageBucket: 'family-zone-2026.firebasestorage.app',
-    iosBundleId: 'com.example.familyZone',
+    iosBundleId: 'com.familyzone.shop',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
