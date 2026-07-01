@@ -45,5 +45,8 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: false
+        # Uploads IPA in the Publishing post-processing step (no Transporter needed).
+        submit_to_testflight: true
+        beta_groups:
+          - Family Zone employee
         submit_to_app_store: false
