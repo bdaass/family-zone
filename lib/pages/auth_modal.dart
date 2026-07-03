@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../config/google_sign_in_config.dart';
 import '../l10n/app_strings.dart';
 import '../utils/user_facing_error.dart';
 
@@ -14,7 +15,7 @@ class AuthModalSheet extends StatefulWidget {
 }
 
 class _AuthModalSheetState extends State<AuthModalSheet> {
-  static final GoogleSignIn _googleSignIn = GoogleSignIn();
+  static final GoogleSignIn _googleSignIn = GoogleSignInConfig.create();
 
   bool isLoginMode = true;
   final _emailController = TextEditingController();
@@ -72,8 +73,9 @@ class _AuthModalSheetState extends State<AuthModalSheet> {
         googleProvider.setCustomParameters({'prompt': 'select_account'});
         userCredential = await FirebaseAuth.instance.signInWithPopup(googleProvider);
       } else {
-        // Clear cached Google session so the account picker is shown every time.
-        await _googleSignIn.signOut();
+        try {
+          await _googleSignIn.signOut();
+        } catch (_) {}
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
         if (googleUser == null) {
           setState(() => _isLoading = false);

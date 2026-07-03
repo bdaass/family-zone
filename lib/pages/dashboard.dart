@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
+import '../config/google_sign_in_config.dart';
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/catalog_sort.dart';
@@ -751,7 +751,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Future<void> _signOut() async {
     try {
       if (!kIsWeb) {
-        await GoogleSignIn().signOut();
+        try {
+          await GoogleSignInConfig.create().signOut();
+        } catch (_) {}
       }
     } catch (e) {
       debugPrint('Google sign out: $e');
