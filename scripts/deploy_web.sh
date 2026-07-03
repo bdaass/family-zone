@@ -4,7 +4,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 flutter build web --release \
-  --wasm \
   --pwa-strategy=none \
   --no-web-resources-cdn
 

@@ -327,8 +327,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               color: AppColors.creamDark,
               child: ProductImageCarousel(
                 imageUrls: widget.imageUrls.isNotEmpty ? widget.imageUrls : [widget.imageUrl],
-                interactive: !WebPlatform.isIOSWeb,
+                interactive: true,
                 showIndicators: true,
+                showNavigationArrows: true,
+                enableKeyboardNavigation: true,
                 focusIndex: _focusImageIndex,
               ),
             ),

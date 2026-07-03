@@ -85,7 +85,10 @@
   <script>
     (function () {
       var ua = navigator.userAgent || '';
-      var isIOS = /iPhone|iPad|iPod/i.test(ua)
+      var params = new URLSearchParams(location.search);
+      var forceIOS = params.get('fz_ios') === '1' || params.get('fz_debug_ios') === '1';
+      var isIOS = forceIOS
+        || /iPhone|iPad|iPod/i.test(ua)
         || (ua.indexOf('Macintosh') !== -1 && navigator.maxTouchPoints > 1);
       var isMobile = isIOS || /Android/i.test(ua);
       var isGecko = /Firefox\//i.test(ua) && !/Seamonkey\//i.test(ua);
@@ -96,7 +99,13 @@
       window.__FZ_IS_MOBILE = isMobile;
       window.__FZ_IS_GECKO = isGecko;
       window.__FZ_IS_EDGE = isEdge;
-      window.__FZ_APP_BUILD = '2026-07-03-ios';
+      window.__FZ_APP_BUILD = '2026-07-03-ios4';
+
+      if (params.get('fz_debug') === '1') {
+        var reloads = parseInt(sessionStorage.getItem('fz_reload_count') || '0', 10) + 1;
+        sessionStorage.setItem('fz_reload_count', String(reloads));
+        console.info('[Family Zone] debug reload count:', reloads, 'ios=', isIOS);
+      }
 
       // Drop stale Flutter service workers (offline-first breaks Edge image/network loads).
       if ('serviceWorker' in navigator) {

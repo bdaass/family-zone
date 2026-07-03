@@ -10,7 +10,7 @@ class ProductImageSettings {
 
   /// Decode cache size for grid thumbnails (cell width × ~2 for retina).
   static int get displayCacheSize {
-    if (WebPlatform.isIOSWeb) return 160;
+    if (WebPlatform.isIOSWeb) return 140;
     if (WebPlatform.isMobileWeb) return 360;
     return 520;
   }
@@ -38,6 +38,19 @@ class ProductImageSettings {
     // conservative minimum width so the card footer (title, sizes, add-to-cart) fits.
     final minCardWidth = isWide ? 200.0 : 160.0;
     return catalogGridAspectRatio(minCardWidth);
+  }
+
+  /// Fixed list row height when the iPhone catalog uses a single column.
+  /// Must match square image (card width) + footer — a hard-coded value overflows on narrow phones.
+  static double catalogListTileHeightForLayout({
+    required bool isWide,
+    double? cardWidth,
+  }) {
+    if (WebPlatform.useSingleColumnCatalog) {
+      final w = cardWidth ?? 360.0;
+      return w / catalogImageAspectRatio + catalogCardFooterMinHeight;
+    }
+    return catalogGridAspectRatioForLayout(isWide: isWide) * (isWide ? 200.0 : 160.0);
   }
 
   /// Decode cache size for product detail / zoom view.

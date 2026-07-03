@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_image_settings.dart';
 import '../utils/web_platform.dart';
@@ -70,7 +73,10 @@ class ProductImageCarousel extends StatefulWidget {
   final BoxFit fit;
   final bool showIndicators;
   final bool interactive;
+  final bool showNavigationArrows;
+  final bool enableKeyboardNavigation;
   final int? focusIndex;
+  final int? decodeCacheSize;
 
   const ProductImageCarousel({
     super.key,
@@ -80,7 +86,10 @@ class ProductImageCarousel extends StatefulWidget {
     this.fit = BoxFit.cover,
     this.showIndicators = false,
     this.interactive = false,
+    this.showNavigationArrows = false,
+    this.enableKeyboardNavigation = false,
     this.focusIndex,
+    this.decodeCacheSize,
   });
 
   @override
@@ -91,12 +100,23 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
   Timer? _timer;
   int _index = 0;
   PageController? _pageController;
+  final FocusNode _focusNode = FocusNode();
 
   List<String> get _urls => widget.imageUrls.where((u) => u.trim().isNotEmpty).toList();
 
   bool get _canSwipe => widget.interactive && _urls.length > 1;
 
-  int get _detailCacheSize => ProductImageSettings.detailCacheSize;
+  int get _imageCacheSize => widget.decodeCacheSize ?? ProductImageSettings.detailCacheSize;
+
+  /// Desktop product-detail only — HTML &lt;img&gt; loads Firebase Storage on phones;
+  /// catalog cards always keep the default strategy (HTML on Chrome/Safari/iOS).
+  bool get _renderInCanvasOnWeb =>
+      kIsWeb &&
+      _canSwipe &&
+      (widget.showNavigationArrows || widget.enableKeyboardNavigation) &&
+      !WebPlatform.isMobileWeb;
+
+  bool get _lazyLoadNeighbors => WebPlatform.isMobileWeb && !widget.showNavigationArrows;
 
   @override
   void initState() {
@@ -127,13 +147,51 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
         widget.focusIndex != oldWidget.focusIndex &&
         widget.focusIndex! >= 0 &&
         widget.focusIndex! < _urls.length) {
-      _index = widget.focusIndex!;
-      if (_pageController?.hasClients == true) {
-        _pageController!.jumpToPage(_index);
+      _goToIndex(widget.focusIndex!, animate: false);
+    }
+  }
+
+  void _goToIndex(int index, {bool animate = true}) {
+    final next = index.clamp(0, _urls.length - 1);
+    if (next == _index && _pageController?.hasClients == true) return;
+    setState(() => _index = next);
+    if (_pageController?.hasClients == true) {
+      if (animate) {
+        _pageController!.animateToPage(
+          next,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
       } else {
-        setState(() {});
+        _pageController!.jumpToPage(next);
       }
     }
+  }
+
+  void _goPrevious() {
+    if (!_canSwipe || _index <= 0) return;
+    _goToIndex(_index - 1);
+  }
+
+  void _goNext() {
+    if (!_canSwipe || _index >= _urls.length - 1) return;
+    _goToIndex(_index + 1);
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (!widget.enableKeyboardNavigation || !_canSwipe) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _goPrevious();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _goNext();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _startAutoPlay() {
@@ -141,14 +199,8 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
     if (!widget.autoPlay || _urls.length < 2 || WebPlatform.isMobileWeb) return;
     _timer = Timer.periodic(widget.interval, (_) {
       if (!mounted || _urls.length < 2) return;
-      setState(() => _index = (_index + 1) % _urls.length);
-      if (_pageController?.hasClients == true) {
-        _pageController!.animateToPage(
-          _index,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
-      }
+      final next = (_index + 1) % _urls.length;
+      _goToIndex(next);
     });
   }
 
@@ -161,6 +213,7 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
   void dispose() {
     _timer?.cancel();
     _pageController?.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -168,8 +221,90 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
     return ProductNetworkImage(
       url: url,
       fit: widget.fit,
-      cacheWidth: _detailCacheSize,
-      cacheHeight: _detailCacheSize,
+      cacheWidth: _imageCacheSize,
+      cacheHeight: _imageCacheSize,
+      renderInCanvasOnWeb: _renderInCanvasOnWeb,
+    );
+  }
+
+  Widget _buildPageView() {
+    return PageView.builder(
+      controller: _pageController,
+      clipBehavior: Clip.hardEdge,
+      itemCount: _urls.length,
+      onPageChanged: (i) {
+        setState(() => _index = i);
+        WebPlatform.trimImageCacheIfNeeded();
+      },
+      itemBuilder: (context, i) {
+        if (_lazyLoadNeighbors && (i - _index).abs() > 1) {
+          return const ColoredBox(color: AppColors.creamDark);
+        }
+        return _carouselImage(_urls[i]);
+      },
+    );
+  }
+
+  Widget _buildCarouselBody() {
+    final pageView = _buildPageView();
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (widget.enableKeyboardNavigation && _canSwipe)
+          Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            onKeyEvent: _onKey,
+            child: const SizedBox.expand(),
+          ),
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragEnd: (details) {
+            if (!_canSwipe) return;
+            final velocity = details.primaryVelocity ?? 0;
+            if (velocity < -120) {
+              _goNext();
+            } else if (velocity > 120) {
+              _goPrevious();
+            }
+          },
+          child: pageView,
+        ),
+        if (widget.showNavigationArrows && _canSwipe) ...[
+          PositionedDirectional(
+            start: 8,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: _CarouselNavButton(
+                icon: Icons.chevron_left_rounded,
+                tooltip: S.of('carousel_prev'),
+                onPressed: _index > 0 ? _goPrevious : null,
+              ),
+            ),
+          ),
+          PositionedDirectional(
+            end: 8,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: _CarouselNavButton(
+                icon: Icons.chevron_right_rounded,
+                tooltip: S.of('carousel_next'),
+                onPressed: _index < _urls.length - 1 ? _goNext : null,
+              ),
+            ),
+          ),
+        ],
+        if (widget.showIndicators)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 10,
+            child: _CarouselDotIndicator(count: _urls.length, index: _index),
+          ),
+      ],
     );
   }
 
@@ -188,34 +323,43 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
       return _carouselImage(urls[idx]);
     }
 
-    final lazyLoad = WebPlatform.isMobileWeb;
+    return _buildCarouselBody();
+  }
+}
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        PageView.builder(
-          controller: _pageController,
-          clipBehavior: Clip.hardEdge,
-          itemCount: urls.length,
-          onPageChanged: (i) {
-            setState(() => _index = i);
-            WebPlatform.trimImageCacheIfNeeded();
-          },
-          itemBuilder: (context, i) {
-            if (lazyLoad && i != _index) {
-              return const ColoredBox(color: AppColors.creamDark);
-            }
-            return _carouselImage(urls[i]);
-          },
-        ),
-        if (widget.showIndicators)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 10,
-            child: _CarouselDotIndicator(count: urls.length, index: _index),
+class _CarouselNavButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  const _CarouselNavButton({
+    required this.icon,
+    required this.tooltip,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.white.withValues(alpha: enabled ? 0.94 : 0.55),
+        shape: const CircleBorder(),
+        elevation: enabled ? 3 : 0,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(7),
+            child: Icon(
+              icon,
+              size: 26,
+              color: enabled ? AppColors.ink : AppColors.inkMuted.withValues(alpha: 0.5),
+            ),
           ),
-      ],
+        ),
+      ),
     );
   }
 }
@@ -255,6 +399,7 @@ class ProductNetworkImage extends StatelessWidget {
   final BoxFit fit;
   final int? cacheWidth;
   final int? cacheHeight;
+  final bool renderInCanvasOnWeb;
 
   const ProductNetworkImage({
     super.key,
@@ -262,13 +407,28 @@ class ProductNetworkImage extends StatelessWidget {
     required this.fit,
     this.cacheWidth,
     this.cacheHeight,
+    this.renderInCanvasOnWeb = false,
   });
+
+  Widget _placeholder() {
+    return const ColoredBox(
+      color: AppColors.creamDark,
+      child: Center(
+        child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 28),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (url.trim().isEmpty) {
+    final url = this.url.trim();
+    if (url.isEmpty) {
       return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 32));
     }
+
+    final htmlStrategy = kIsWeb && renderInCanvasOnWeb
+        ? WebHtmlElementStrategy.never
+        : WebPlatform.networkImageStrategy;
 
     return Image.network(
       url,
@@ -280,19 +440,10 @@ class ProductNetworkImage extends StatelessWidget {
       cacheHeight: cacheHeight,
       gaplessPlayback: true,
       filterQuality: WebPlatform.networkImageQuality,
-      webHtmlElementStrategy: WebPlatform.networkImageStrategy,
+      webHtmlElementStrategy: htmlStrategy,
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
-        return const ColoredBox(
-          color: AppColors.creamDark,
-          child: Center(
-            child: SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral),
-            ),
-          ),
-        );
+        return _placeholder();
       },
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Product image load failed: $error');

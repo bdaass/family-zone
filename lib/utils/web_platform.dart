@@ -39,15 +39,18 @@ class WebPlatform {
   static FilterQuality get networkImageQuality =>
       isIOSWeb ? FilterQuality.low : (isMobileWeb ? FilterQuality.low : FilterQuality.medium);
 
-  /// iOS Safari: 6 products per page to stay under WebKit memory limits.
+  /// iOS Safari: 6 products per page — compact 2-column grid keeps memory lower than full-width cards.
   static int get catalogPageSize => isIOSWeb ? 6 : 18;
+
+  /// Two-column catalog on iPhone — smaller thumbnails than a single full-width row.
+  static bool get useSingleColumnCatalog => false;
 
   static void configure() {
     if (!kIsWeb) return;
     final cache = PaintingBinding.instance.imageCache;
     if (isIOSWeb) {
-      cache.maximumSize = 12;
-      cache.maximumSizeBytes = 10 << 20;
+      cache.maximumSize = 8;
+      cache.maximumSizeBytes = 8 << 20;
     } else if (isMobileWeb) {
       cache.maximumSize = 80;
       cache.maximumSizeBytes = 48 << 20;
@@ -67,7 +70,7 @@ class WebPlatform {
 
   static void onCatalogPageLoadStart() {
     if (!isIOSWeb) return;
-    clearImageCache();
+    trimImageCacheIfNeeded();
   }
 
   static void onCatalogPageLoadComplete() {

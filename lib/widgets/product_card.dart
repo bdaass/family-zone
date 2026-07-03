@@ -154,10 +154,16 @@ class _ProductCardItemState extends State<ProductCardItem> {
                       children: [
                         ColoredBox(
                           color: AppColors.creamDark,
-                          child: ProductThumbnail(
-                            imageUrl: imageUrls.isEmpty ? '' : imageUrls.first,
-                            extraPhotoCount: imageUrls.length > 1 ? imageUrls.length - 1 : 0,
-                          ),
+                          child: imageUrls.length > 1
+                              ? ProductImageCarousel(
+                                  imageUrls: imageUrls,
+                                  interactive: true,
+                                  showIndicators: true,
+                                  decodeCacheSize: ProductImageSettings.displayCacheSize,
+                                )
+                              : ProductThumbnail(
+                                  imageUrl: imageUrls.isEmpty ? '' : imageUrls.first,
+                                ),
                         ),
                         if (widget.isHidden)
                           Positioned.fill(

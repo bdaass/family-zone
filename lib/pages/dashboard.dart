@@ -804,7 +804,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Widget _buildCatalogScrollView({required bool isWide, required bool useInlineSidebar}) {
-    final scrollBody = CustomScrollView(
+    final scrollBody = NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (WebPlatform.isIOSWeb && notification is ScrollStartNotification) {
+          WebPlatform.trimImageCacheIfNeeded();
+        }
+        return false;
+      },
+      child: CustomScrollView(
       controller: _scrollController,
       cacheExtent: WebPlatform.isIOSWeb ? 0 : (WebPlatform.isMobileWeb ? 120 : 250),
       physics: WebPlatform.isIOSWeb
@@ -855,6 +862,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           _buildProductGrid(isWide),
           const SliverToBoxAdapter(child: SizedBox(height: 60)),
         ],
+      ),
     );
 
     final scroll = WebPlatform.isIOSWeb
@@ -1271,83 +1279,45 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           );
         }
 
+        final horizontalPadding = isWide ? 20.0 : 12.0;
+        final cardWidth = MediaQuery.sizeOf(context).width - horizontalPadding * 2;
         final cardAspectRatio = ProductImageSettings.catalogGridAspectRatioForLayout(isWide: isWide);
+        final listTileHeight = ProductImageSettings.catalogListTileHeightForLayout(
+          isWide: isWide,
+          cardWidth: cardWidth,
+        );
+        final useList = WebPlatform.useSingleColumnCatalog;
 
         return SliverMainAxisGroup(
           slivers: [
             SliverPadding(
               padding: EdgeInsets.symmetric(horizontal: isWide ? 20 : 12, vertical: 8),
-              sliver: SliverGrid(
+              sliver: useList
+                  ? SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SizedBox(
+                            height: listTileHeight,
+                            child: _buildCatalogProductCard(filteredDocs, index),
+                          ),
+                        ),
+                        childCount: filteredDocs.length,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: true,
+                      ),
+                    )
+                  : SliverGrid(
                 gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: isWide
                       ? 280
-                      : (WebPlatform.isIOSWeb ? 190 : 220),
+                      : (WebPlatform.isIOSWeb ? 175 : 220),
                   mainAxisSpacing: isWide ? 24 : 18,
                   crossAxisSpacing: isWide ? 20 : 12,
                   childAspectRatio: cardAspectRatio,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final doc = filteredDocs[index];
-                    final data = doc.data();
-                    final imageUrls = ProductCatalog.productImageUrlsFrom(data);
-                    final imageUrl = ProductCatalog.primaryImageUrl(data);
-                    final card = ProductCardItem(
-                      key: ValueKey(doc.id),
-                      imageUrl: imageUrl,
-                      imageUrls: imageUrls,
-                      title: ProductCatalog.titleFrom(data),
-                      description: ProductCatalog.descriptionFrom(data),
-                      size: ProductCatalog.sizeFrom(data),
-                      colors: ProductCatalog.colorsFrom(data),
-                      productId: ProductCatalog.productIdFrom(data, doc.id),
-                      price: ProductCatalog.priceFrom(data),
-                      soldPrice: ProductCatalog.soldPriceFrom(data),
-                      favoriteCount: ProductCatalog.favoriteCountFrom(data),
-                      isFavorited: _likedProductIds.contains(doc.id),
-                      onTap: () => _openProductDetail(doc.id, data),
-                      onFavoriteToggle: () => _toggleFavorite(doc.id),
-                      showProductId: _isStaff,
-                      isSoldOut: data['sold'] ?? false,
-                      isHidden: !ProductPermissions.isVisible(data),
-                      isPendingApproval: ProductPermissions.isPendingApproval(data),
-                      isNew: ProductCatalog.isNewlyAdded(data),
-                      isOld: ProductCatalog.isOlderThanSixMonths(data),
-                      showOldBadge: userRole == 'admin',
-                      showStaffActions: _isStaff,
-                      canDelete: ProductPermissions.canDelete(userRole),
-                      canEdit: ProductPermissions.canEdit(userRole),
-                      canToggleVisibility: ProductPermissions.canToggleVisibility(userRole),
-                      onDelete: () => _deleteProduct(doc.id, data),
-                      onEdit: () => _editProduct(doc.id, data),
-                      onToggleVisibility: () => _toggleVisibility(doc.id, data),
-                      onAddToCart: _isStaff ? null : () => _openAddToCart(doc.id, data),
-                    );
-                    if (WebPlatform.isMobileWeb) return card;
-                    return TweenAnimationBuilder<double>(
-                      key: ValueKey('${doc.id}-$catalogSort-$selectedSeason-$selectedAgeGroup-$selectedSex-$selectedCategory-$saleOnly-$priceMin-$priceMax-${_searchController.text}'),
-                      duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, value, child) {
-                        if (!context.mounted) return child ?? const SizedBox.shrink();
-                        if (kIsWeb) {
-                          return Opacity(opacity: value, child: child);
-                        }
-                        return Opacity(
-                          opacity: value,
-                          child: Transform.translate(
-                            offset: Offset(0, 24 * (1 - value)),
-                            child: Transform.scale(
-                              scale: 0.92 + (0.08 * value),
-                              child: child,
-                            ),
-                          ),
-                        );
-                      },
-                      child: card,
-                    );
-                  },
+                  (context, index) => _buildCatalogProductCard(filteredDocs, index),
                   childCount: filteredDocs.length,
                   addAutomaticKeepAlives: !WebPlatform.isIOSWeb,
                   addRepaintBoundaries: true,
@@ -1367,6 +1337,70 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         );
   }
 
+  Widget _buildCatalogProductCard(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    int index,
+  ) {
+    final doc = docs[index];
+    final data = doc.data();
+    final imageUrls = ProductCatalog.productImageUrlsFrom(data);
+    final imageUrl = ProductCatalog.primaryImageUrl(data);
+    final card = ProductCardItem(
+      key: ValueKey(doc.id),
+      imageUrl: imageUrl,
+      imageUrls: imageUrls,
+      title: ProductCatalog.titleFrom(data),
+      description: ProductCatalog.descriptionFrom(data),
+      size: ProductCatalog.sizeFrom(data),
+      colors: ProductCatalog.colorsFrom(data),
+      productId: ProductCatalog.productIdFrom(data, doc.id),
+      price: ProductCatalog.priceFrom(data),
+      soldPrice: ProductCatalog.soldPriceFrom(data),
+      favoriteCount: ProductCatalog.favoriteCountFrom(data),
+      isFavorited: _likedProductIds.contains(doc.id),
+      onTap: () => _openProductDetail(doc.id, data),
+      onFavoriteToggle: () => _toggleFavorite(doc.id),
+      showProductId: _isStaff,
+      isSoldOut: data['sold'] ?? false,
+      isHidden: !ProductPermissions.isVisible(data),
+      isPendingApproval: ProductPermissions.isPendingApproval(data),
+      isNew: ProductCatalog.isNewlyAdded(data),
+      isOld: ProductCatalog.isOlderThanSixMonths(data),
+      showOldBadge: userRole == 'admin',
+      showStaffActions: _isStaff,
+      canDelete: ProductPermissions.canDelete(userRole),
+      canEdit: ProductPermissions.canEdit(userRole),
+      canToggleVisibility: ProductPermissions.canToggleVisibility(userRole),
+      onDelete: () => _deleteProduct(doc.id, data),
+      onEdit: () => _editProduct(doc.id, data),
+      onToggleVisibility: () => _toggleVisibility(doc.id, data),
+      onAddToCart: _isStaff ? null : () => _openAddToCart(doc.id, data),
+    );
+    if (WebPlatform.isMobileWeb) return card;
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('${doc.id}-$catalogSort-$selectedSeason-$selectedAgeGroup-$selectedSex-$selectedCategory-$saleOnly-$priceMin-$priceMax-${_searchController.text}'),
+      duration: Duration(milliseconds: 350 + (index * 80).clamp(0, 500)),
+      tween: Tween(begin: 0.0, end: 1.0),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        if (!context.mounted) return child ?? const SizedBox.shrink();
+        if (kIsWeb) {
+          return Opacity(opacity: value, child: child);
+        }
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 24 * (1 - value)),
+            child: Transform.scale(
+              scale: 0.92 + (0.08 * value),
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: card,
+    );
+  }
 }
 
 class _FilterButton extends StatelessWidget {
