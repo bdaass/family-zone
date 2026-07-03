@@ -68,8 +68,8 @@ class ProductCatalogService extends ChangeNotifier {
   ProductCatalogService._();
   static final ProductCatalogService instance = ProductCatalogService._();
 
-  static const int pageSize = 18;
-  static const _maxBackfillRounds = 5;
+  static int get pageSize => WebPlatform.catalogPageSize;
+  static int get _maxBackfillRounds => WebPlatform.isIOSWeb ? 8 : 5;
   /// Admin session: may backfill [effectivePrice] on legacy products (Firestore rules).
   bool adminCanBackfillPrices = false;
   bool? _sortUsesBrowseFallback;
@@ -144,6 +144,10 @@ class ProductCatalogService extends ChangeNotifier {
     _query = query;
     _error = null;
     _loading = true;
+    if (WebPlatform.isIOSWeb) {
+      _docs = [];
+    }
+    WebPlatform.onCatalogPageLoadStart();
     notifyListeners();
 
     if (_totalCount == null && !_needsClientSidePass(query)) {
@@ -191,7 +195,7 @@ class ProductCatalogService extends ChangeNotifier {
 
       _loading = false;
       notifyListeners();
-      WebPlatform.trimImageCacheIfNeeded();
+      WebPlatform.onCatalogPageLoadComplete();
     } catch (e, st) {
       if (generation != _fetchGeneration) return;
       debugPrint('ProductCatalogService.loadPage failed: $e\n$st');
@@ -270,6 +274,7 @@ class ProductCatalogService extends ChangeNotifier {
     var rounds = 0;
     var serverHasMore = true;
     final needsClientPass = _needsClientSidePass(query);
+    final applyClientFilters = needsClientPass || !_usesSimpleBrowse(query);
     final maxRounds = _sortUsesBrowseFallback == true ? 20 : _maxBackfillRounds;
     QueryDocumentSnapshot<Map<String, dynamic>>? serverCursor;
 
@@ -283,7 +288,7 @@ class ProductCatalogService extends ChangeNotifier {
       serverHasMore = snap.docs.length >= pageSize;
 
       for (final doc in snap.docs) {
-        if (needsClientPass && !_passesClientFilters(query, doc)) continue;
+        if (applyClientFilters && !_passesClientFilters(query, doc)) continue;
         results.add(doc);
         if (results.length >= pageSize) break;
       }

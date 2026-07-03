@@ -6,15 +6,30 @@ import 'variant_inventory.dart';
 
 /// Shared product categories, filters, and field helpers.
 class ProductCatalog {
-  static const seasons = ['summer', 'winter', 'sport', 'all_seasons'];
+  static const seasons = ['summer', 'winter', 'all_seasons', 'sport'];
+
+  static const filterSeasons = [
+    'All Seasons',
+    'Summer',
+    'Winter',
+    'All Season',
+    'Sport',
+  ];
   static const ageGroups = ['adult', 'kids', 'baby'];
   static const sexes = ['female', 'male'];
-  static const types = ['clothes', 'shoes', 'lingery', 'sac', 'scarf'];
-
-  static const filterSeasons = ['All Seasons', 'Summer', 'Winter', 'Sport', 'All Year'];
+  static const types = ['clothes', 'shoes', 'socks', 'belt', 'lingery', 'sac', 'scarf'];
   static const filterAgeGroups = ['All', 'Adult', 'Kids', 'Baby'];
   static const filterSexes = ['All', 'Female', 'Male'];
-  static const filterCategories = ['All Categories', 'Clothes', 'Shoes', 'Lingery', 'Sac', 'Scarf'];
+  static const filterCategories = [
+    'All Categories',
+    'Clothes',
+    'Shoes',
+    'Socks',
+    'Belt',
+    'Lingery',
+    'Sac',
+    'Scarf',
+  ];
 
   /// Stored on products when staff has not decided yet (add form).
   static const notDetermined = 'not_determined';
@@ -208,6 +223,14 @@ class ProductCatalog {
         return S.of('catalog_clothes');
       case 'shoes':
         return S.of('catalog_shoes');
+      case 'socks':
+      case 'chaussette':
+      case 'chaussettes':
+        return S.of('catalog_socks');
+      case 'belt':
+      case 'ceinture':
+      case 'ceintures':
+        return S.of('catalog_belt');
       case 'lingery':
         return S.of('catalog_lingery');
       case 'sac':
@@ -235,14 +258,19 @@ class ProductCatalog {
         return S.of('season_winter');
       case 'Sport':
         return S.of('season_sport');
+      case 'All Season':
       case 'All Year':
-        return S.of('season_all_year');
+        return S.of('season_all_season');
       case 'All Categories':
         return S.of('category_all');
       case 'Clothes':
         return S.of('category_clothes');
       case 'Shoes':
         return S.of('category_shoes');
+      case 'Socks':
+        return S.of('category_socks');
+      case 'Belt':
+        return S.of('category_belt');
       case 'Lingery':
         return S.of('category_lingery');
       case 'Sac':
@@ -266,8 +294,9 @@ class ProductCatalog {
         return S.of('category_scarves');
       case 'All Seasons':
         return S.of('filter_all_seasons');
+      case 'All Season':
       case 'All Year':
-        return S.of('filter_all_year');
+        return S.of('season_all_season');
       case 'All Categories':
         return S.of('filter_all_categories');
       default:
@@ -279,13 +308,21 @@ class ProductCatalog {
     if (isNotDetermined(raw)) return notDetermined;
     final v = (raw ?? '').toLowerCase().trim();
     if (v == 'sacs') return 'sac';
+    if (v == 'chaussure' || v == 'chaussures') return 'shoes';
+    if (v == 'chaussette' || v == 'chaussettes') return 'socks';
+    if (v == 'ceinture' || v == 'ceintures' || v == 'belts') return 'belt';
     return v;
   }
 
   static String normalizeSeason(String? raw) {
     if (isNotDetermined(raw)) return notDetermined;
     final v = (raw ?? '').toLowerCase().trim();
-    if (v == 'all seasons' || v == 'all_seasons' || v == 'allseasons') {
+    if (v == 'all season' ||
+        v == 'all seasons' ||
+        v == 'all_seasons' ||
+        v == 'allseasons' ||
+        v == 'all year' ||
+        v == 'all_year') {
       return 'all_seasons';
     }
     return v;
@@ -293,14 +330,24 @@ class ProductCatalog {
 
   static bool isAllSeasonsProduct(String? stored) => normalizeSeason(stored) == 'all_seasons';
 
-  /// All Seasons → everything. Summer → summer + all_seasons items, etc.
+  /// Stored season for a shop filter chip, or null when showing all seasons.
+  static String? seasonFilterStoredValue(String filterLabel) {
+    return switch (filterLabel) {
+      'Summer' => 'summer',
+      'Winter' => 'winter',
+      'Sport' => 'sport',
+      'All Season' || 'All Year' => 'all_seasons',
+      _ => null,
+    };
+  }
+
+  /// Each season is exclusive — sport items never appear under winter, etc.
   static bool matchesSeason(String? stored, String filterLabel) {
     if (filterLabel == 'All Seasons') return true;
     if (isNotDetermined(stored)) return false;
-    final itemSeason = normalizeSeason(stored);
-    if (filterLabel == 'All Year') return itemSeason == 'all_seasons';
-    final filter = filterLabel.toLowerCase();
-    return itemSeason == filter || itemSeason == 'all_seasons';
+    final target = seasonFilterStoredValue(filterLabel);
+    if (target == null) return false;
+    return normalizeSeason(stored) == target;
   }
 
   static bool matchesAgeGroupFilter(Map<String, dynamic> data, String filterLabel) {
@@ -646,12 +693,22 @@ class ProductCatalog {
       case 'gray':
       case 'grey':
         return const Color(0xFF9E9E9E);
+      case 'light gray':
+      case 'light grey':
+        return const Color(0xFFBDBDBD);
+      case 'dark gray':
+      case 'dark grey':
+        return const Color(0xFF424242);
       case 'red':
         return const Color(0xFFC62828);
       case 'pink':
         return const Color(0xFFE891A8);
+      case 'peach':
+        return const Color(0xFFFFCC99);
       case 'blue':
         return const Color(0xFF1565C0);
+      case 'light blue':
+        return const Color(0xFF90CAF9);
       case 'green':
         return const Color(0xFF2E7D32);
       case 'brown':
@@ -660,8 +717,12 @@ class ProductCatalog {
         return const Color(0xFFE65100);
       case 'yellow':
         return const Color(0xFFF9A825);
+      case 'yellow butter':
+        return const Color(0xFFF5E6A3);
       case 'purple':
         return const Color(0xFF6A1B9A);
+      case 'lilac':
+        return const Color(0xFFC8A2C8);
       case 'burgundy':
         return const Color(0xFF6D1B2A);
       case 'cream':
@@ -1138,11 +1199,16 @@ class ProductCatalog {
     return created.isBefore(cutoff);
   }
 
-  /// Firestore `whereIn` values for a season filter chip (includes all-season items).
+  /// Firestore `whereIn` values — exact season only (plus legacy spelling for all-season).
   static List<String> seasonsForFilter(String filterLabel) {
     if (filterLabel == 'All Seasons') return const [];
-    if (filterLabel == 'All Year') return const ['all_seasons', 'all seasons'];
-    return [filterLabel.toLowerCase(), 'all_seasons', 'all seasons'];
+    return switch (filterLabel) {
+      'Summer' => const ['summer'],
+      'Winter' => const ['winter'],
+      'Sport' => const ['sport'],
+      'All Season' || 'All Year' => const ['all_seasons', 'all seasons'],
+      _ => const [],
+    };
   }
 
   /// Stored [ageGroup] value for a filter chip, or null when showing all ages.

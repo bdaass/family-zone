@@ -97,7 +97,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       CurvedAnimation(parent: _entranceController, curve: Curves.easeOutCubic),
     );
 
-    _entranceController.forward();
+    if (WebPlatform.isIOSWeb) {
+      _entranceController.value = 1.0;
+    } else {
+      _entranceController.forward();
+    }
     CartService.instance.addListener(_onCartChanged);
     _catalog.addListener(_onCatalogChanged);
     if (kIsWeb) {
@@ -163,11 +167,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   void _scheduleCatalogReload({bool immediate = false}) {
     _catalogDebounce?.cancel();
+    final debounceMs = WebPlatform.isIOSWeb ? 500 : 350;
     if (immediate || !WebPlatform.isMobileWeb) {
       _reloadCatalog();
       return;
     }
-    _catalogDebounce = Timer(const Duration(milliseconds: 350), () {
+    _catalogDebounce = Timer(Duration(milliseconds: debounceMs), () {
       if (mounted) _reloadCatalog();
     });
   }
@@ -799,14 +804,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Widget _buildCatalogScrollView({required bool isWide, required bool useInlineSidebar}) {
-    final scroll = RefreshIndicator(
-      color: AppColors.coral,
-      onRefresh: _refreshDashboard,
-      child: CustomScrollView(
-        controller: _scrollController,
-        cacheExtent: WebPlatform.isMobileWeb ? 120 : 250,
-        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-        slivers: [
+    final scrollBody = CustomScrollView(
+      controller: _scrollController,
+      cacheExtent: WebPlatform.isIOSWeb ? 0 : (WebPlatform.isMobileWeb ? 120 : 250),
+      physics: WebPlatform.isIOSWeb
+          ? const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics())
+          : const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      slivers: [
           if (_isStaff)
             SliverToBoxAdapter(
               child: Column(
@@ -851,8 +855,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           _buildProductGrid(isWide),
           const SliverToBoxAdapter(child: SizedBox(height: 60)),
         ],
-      ),
     );
+
+    final scroll = WebPlatform.isIOSWeb
+        ? scrollBody
+        : RefreshIndicator(
+            color: AppColors.coral,
+            onRefresh: _refreshDashboard,
+            child: scrollBody,
+          );
 
     if (kIsWeb) return scroll;
 
@@ -1268,7 +1279,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               padding: EdgeInsets.symmetric(horizontal: isWide ? 20 : 12, vertical: 8),
               sliver: SliverGrid(
                 gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: isWide ? 280 : 220,
+                  maxCrossAxisExtent: isWide
+                      ? 280
+                      : (WebPlatform.isIOSWeb ? 190 : 220),
                   mainAxisSpacing: isWide ? 24 : 18,
                   crossAxisSpacing: isWide ? 20 : 12,
                   childAspectRatio: cardAspectRatio,
@@ -1336,6 +1349,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     );
                   },
                   childCount: filteredDocs.length,
+                  addAutomaticKeepAlives: !WebPlatform.isIOSWeb,
+                  addRepaintBoundaries: true,
                 ),
               ),
             ),

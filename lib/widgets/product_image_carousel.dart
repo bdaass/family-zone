@@ -130,6 +130,8 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
       _index = widget.focusIndex!;
       if (_pageController?.hasClients == true) {
         _pageController!.jumpToPage(_index);
+      } else {
+        setState(() {});
       }
     }
   }
@@ -182,7 +184,8 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
     }
 
     if (!_canSwipe) {
-      return _carouselImage(urls.first);
+      final idx = _index.clamp(0, urls.length - 1);
+      return _carouselImage(urls[idx]);
     }
 
     final lazyLoad = WebPlatform.isMobileWeb;
@@ -275,8 +278,22 @@ class ProductNetworkImage extends StatelessWidget {
       height: double.infinity,
       cacheWidth: cacheWidth,
       cacheHeight: cacheHeight,
+      gaplessPlayback: true,
       filterQuality: WebPlatform.networkImageQuality,
       webHtmlElementStrategy: WebPlatform.networkImageStrategy,
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return const ColoredBox(
+          color: AppColors.creamDark,
+          child: Center(
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral),
+            ),
+          ),
+        );
+      },
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Product image load failed: $error');
         return const Center(child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 32));

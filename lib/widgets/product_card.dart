@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
 import '../utils/product_image_settings.dart';
+import '../utils/web_platform.dart';
 import '../theme/app_theme.dart';
 import 'product_image_carousel.dart';
 
@@ -85,33 +86,65 @@ class _ProductCardItemState extends State<ProductCardItem> {
       'imageUrl': widget.imageUrl,
     });
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.ink.withValues(alpha: _hovered ? 0.1 : 0.05),
-              blurRadius: _hovered ? 24 : 12,
-              offset: Offset(0, _hovered ? 12 : 6),
+    final lite = WebPlatform.useLiteUi;
+
+    final card = lite
+        ? _buildCardBody(imageUrls)
+        : MouseRegion(
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.ink.withValues(alpha: _hovered ? 0.1 : 0.05),
+                    blurRadius: _hovered ? 24 : 12,
+                    offset: Offset(0, _hovered ? 12 : 6),
+                  ),
+                ],
+              ),
+              child: _buildCardBody(imageUrls),
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Material(
-            color: AppColors.white,
-            child: InkWell(
-              onTap: () {
-                if (_hovered) setState(() => _hovered = false);
-                widget.onTap?.call();
-              },
+          );
+
+    return card;
+  }
+
+  Widget _buildCardBody(List<String> imageUrls) {
+    final lite = WebPlatform.useLiteUi;
+    final shell = lite
+        ? DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.white,
               borderRadius: BorderRadius.circular(20),
-              child: Column(
+              border: Border.all(color: AppColors.creamDark.withValues(alpha: 0.9)),
+            ),
+            child: _buildCardContent(imageUrls),
+          )
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Material(
+              color: AppColors.white,
+              child: _buildCardContent(imageUrls),
+            ),
+          );
+
+    return shell;
+  }
+
+  Widget _buildCardContent(List<String> imageUrls) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (_hovered) setState(() => _hovered = false);
+          widget.onTap?.call();
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   AspectRatio(
@@ -233,9 +266,6 @@ class _ProductCardItemState extends State<ProductCardItem> {
                 ],
               ),
             ),
-          ),
-        ),
-      ),
     );
   }
 

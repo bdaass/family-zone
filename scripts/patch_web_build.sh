@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Post-build web tuning:
-# - Enable skwasm on Firefox (gecko) for fast loads
-# - Chromium CanvasKit fallback for Chrome/Safari when skwasm is unavailable
+# - skwasm on Chromium + Firefox only (WebKit/Safari+iOS Chrome use CanvasKit — far less OOM)
+# - Chromium CanvasKit fallback when skwasm is unavailable
 # - Strip broken sourceMappingURL comments (Firebase SPA rewrite serves HTML for missing .map files)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,6 +24,8 @@ text = bootstrap.read_text()
 
 # Upgrade older patches that disabled Firefox skwasm.
 text = text.replace("gecko: false", "gecko: true")
+# iOS Safari + iOS Chrome (WebKit) OOM-crash with skwasm — use CanvasKit instead.
+text = text.replace("webkit: true", "webkit: false")
 
 marker = 'canvasKitVariant: "chromium"'
 if marker not in text:
@@ -36,7 +38,7 @@ if marker not in text:
     wasmAllowList: {
       blink: true,
       gecko: true,
-      webkit: true,
+      webkit: false,
     },
   },
   serviceWorkerSettings:"""
@@ -44,9 +46,9 @@ if marker not in text:
         text = text.replace(needle, replacement.rstrip("serviceWorkerSettings:"), 1)
     else:
         text = text.replace(needle, replacement, 1)
-    print(f"Patched {bootstrap} (skwasm for all engines + chromium CanvasKit fallback)")
+    print(f"Patched {bootstrap} (skwasm off on WebKit, chromium CanvasKit fallback)")
 else:
-    print(f"Bootstrap config already present: {bootstrap}")
+    print(f"Bootstrap config already present: {bootstrap} (webkit skwasm disabled)")
 
 bootstrap.write_text(text)
 

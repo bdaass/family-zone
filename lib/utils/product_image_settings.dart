@@ -10,7 +10,7 @@ class ProductImageSettings {
 
   /// Decode cache size for grid thumbnails (cell width × ~2 for retina).
   static int get displayCacheSize {
-    if (WebPlatform.isIOSWeb) return 280;
+    if (WebPlatform.isIOSWeb) return 160;
     if (WebPlatform.isMobileWeb) return 360;
     return 520;
   }
@@ -41,5 +41,9 @@ class ProductImageSettings {
   }
 
   /// Decode cache size for product detail / zoom view.
-  static int get detailCacheSize => WebPlatform.isMobileWeb ? 900 : 1200;
+  static int get detailCacheSize {
+    if (WebPlatform.isIOSWeb) return 420;
+    if (WebPlatform.isMobileWeb) return 900;
+    return 1200;
+  }
 }

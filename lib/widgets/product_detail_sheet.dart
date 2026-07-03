@@ -9,6 +9,7 @@ import '../services/product_share_service.dart';
 import '../services/product_view_service.dart';
 import '../services/product_image_service.dart';
 import '../utils/product_image_settings.dart';
+import '../utils/web_platform.dart';
 import '../theme/app_theme.dart';
 import '../pages/product_detail_page.dart';
 import 'product_image_carousel.dart';
@@ -215,6 +216,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     ProductViewService.instance.recordView(docId);
   }
 
+  @override
+  void dispose() {
+    WebPlatform.onHeavyViewClosed();
+    super.dispose();
+  }
+
   Future<void> _shareProduct() async {
     await ProductShareService.shareProduct(productId: widget.productId, title: widget.title);
   }
@@ -320,7 +327,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               color: AppColors.creamDark,
               child: ProductImageCarousel(
                 imageUrls: widget.imageUrls.isNotEmpty ? widget.imageUrls : [widget.imageUrl],
-                interactive: true,
+                interactive: !WebPlatform.isIOSWeb,
                 showIndicators: true,
                 focusIndex: _focusImageIndex,
               ),

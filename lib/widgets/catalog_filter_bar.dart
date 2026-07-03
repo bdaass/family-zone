@@ -46,8 +46,6 @@ class CatalogFilterBar extends StatelessWidget {
     this.compact = false,
   });
 
-  static const _categories = ['All Categories', 'Clothes', 'Shoes', 'Lingery', 'Sac', 'Scarf'];
-
   bool get _hasActive =>
       currentAgeGroup != 'All' ||
       currentSex != 'All' ||
@@ -74,7 +72,7 @@ class CatalogFilterBar extends StatelessWidget {
         SizedBox(height: gap),
         _row(S.of('filter_season'), ProductCatalog.filterSeasons, currentSeason, onSeasonChanged),
         SizedBox(height: gap),
-        _row(S.of('filter_type'), _categories, currentCategory, onCategoryChanged),
+        _row(S.of('filter_type'), ProductCatalog.filterCategories, currentCategory, onCategoryChanged),
         SizedBox(height: gap),
         _saleRow(),
         SizedBox(height: gap),
