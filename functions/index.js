@@ -1,15 +1,35 @@
 const { onDocumentWritten } = require('firebase-functions/v2/firestore');
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getStorage } = require('firebase-admin/storage');
 
 initializeApp();
 
 const db = getFirestore();
-
+const PUBLIC_PRODUCT_PREFIX = 'product_images/';
 const CONTACT_WINDOW_MS = 60 * 60 * 1000;
 const CONTACT_MAX_PER_WINDOW = 5;
+
+async function verifyStaffMediaAccess(req) {
+  const authHeader = req.headers.authorization || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return false;
+
+  try {
+    const decoded = await getAuth().verifyIdToken(match[1]);
+    const claimRole = decoded.role || '';
+    if (claimRole === 'admin' || claimRole === 'employee') return true;
+
+    const userSnap = await db.collection('users').doc(decoded.uid).get();
+    if (!userSnap.exists) return false;
+    const firestoreRole = userSnap.data().role || 'client';
+    return firestoreRole === 'admin' || firestoreRole === 'employee';
+  } catch (_) {
+    return false;
+  }
+}
 
 // Firestore (default) is eur3 — deploy this trigger in europe-west1, not us-central1.
 exports.syncUserRoleToClaims = onDocumentWritten(
@@ -125,4 +145,59 @@ exports.submitContactMessage = onCall(async (request) => {
   });
 
   return { ok: true };
+});
+
+/// Same-origin product photos for web — avoids Chrome profiles/extensions blocking googleapis.com.
+exports.productMedia = onRequest({ region: 'europe-west1' }, async (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.status(405).end();
+    return;
+  }
+
+  let objectPath = req.path.startsWith('/media/') ? req.path.slice('/media/'.length) : req.path;
+  try {
+    objectPath = decodeURIComponent(objectPath);
+  } catch (_) {
+    res.status(400).end();
+    return;
+  }
+
+  if (!objectPath.startsWith(PUBLIC_PRODUCT_PREFIX)) {
+    res.status(404).end();
+    return;
+  }
+
+  const fileName = objectPath.split('/').pop() || '';
+  const isBarcode = fileName === 'barcode.jpg';
+
+  if (isBarcode) {
+    const allowed = await verifyStaffMediaAccess(req);
+    if (!allowed) {
+      res.status(403).end();
+      return;
+    }
+  }
+
+  try {
+    const file = getStorage().bucket().file(objectPath);
+    const [exists] = await file.exists();
+    if (!exists) {
+      res.status(404).end();
+      return;
+    }
+
+    res.set('Cache-Control', isBarcode ? 'private, max-age=3600' : 'public, max-age=86400');
+    res.set('Content-Type', 'image/jpeg');
+
+    if (req.method === 'HEAD') {
+      res.status(200).end();
+      return;
+    }
+
+    file.createReadStream().on('error', () => {
+      if (!res.headersSent) res.status(404).end();
+    }).pipe(res);
+  } catch (_) {
+    if (!res.headersSent) res.status(500).end();
+  }
 });

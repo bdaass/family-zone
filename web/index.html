@@ -99,7 +99,13 @@
       window.__FZ_IS_MOBILE = isMobile;
       window.__FZ_IS_GECKO = isGecko;
       window.__FZ_IS_EDGE = isEdge;
-      window.__FZ_APP_BUILD = '2026-07-03-ios4';
+      window.__FZ_APP_BUILD = '2026-07-16-web5';
+
+      if ('caches' in window) {
+        caches.keys().then(function (keys) {
+          keys.forEach(function (key) { caches.delete(key); });
+        });
+      }
 
       if (params.get('fz_debug') === '1') {
         var reloads = parseInt(sessionStorage.getItem('fz_reload_count') || '0', 10) + 1;

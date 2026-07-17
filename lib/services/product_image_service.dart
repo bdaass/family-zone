@@ -1,6 +1,8 @@
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
+import '../utils/storage_media_url.dart';
+
 /// Product photo + barcode upload paths under `product_images/{productId}/`.
 class ProductImageUpdate {
   final List<String> keptImageUrls;
@@ -60,6 +62,12 @@ class ProductImageService {
     String? storedUrl,
   }) async {
     final trimmedId = productStorageId.trim();
+    if (kIsWeb && trimmedId.isNotEmpty) {
+      return Uri.base.resolve(
+        StorageMediaUrl.sameOriginMediaUrl(barcodeImagePath(trimmedId)),
+      ).toString();
+    }
+
     if (trimmedId.isNotEmpty) {
       try {
         final ref = FirebaseStorage.instance.ref().child(barcodeImagePath(trimmedId));

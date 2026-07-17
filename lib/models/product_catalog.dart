@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
+import '../utils/storage_media_url.dart';
 import 'variant_inventory.dart';
 
 /// Shared product categories, filters, and field helpers.
@@ -479,13 +480,13 @@ class ProductCatalog {
     final urls = data['imageUrls'];
     if (urls is List) {
       final list = urls
-          .map((e) => e.toString().trim())
+          .map((e) => StorageMediaUrl.displayUrl(e.toString()))
           .where((u) => u.isNotEmpty)
           .toList();
       if (list.isNotEmpty) return list;
     }
     final legacy = data['imageUrl'] ?? data['image_url'] ?? data['image'] ?? '';
-    final single = legacy.toString().trim();
+    final single = StorageMediaUrl.displayUrl(legacy.toString());
     return single.isEmpty ? const [] : [single];
   }
 

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_image_settings.dart';
+import '../utils/storage_media_url.dart';
 import '../utils/web_platform.dart';
 
 /// Single product photo for grids and lists (no carousel timers).
@@ -108,15 +109,7 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
 
   int get _imageCacheSize => widget.decodeCacheSize ?? ProductImageSettings.detailCacheSize;
 
-  /// Desktop product-detail only — HTML &lt;img&gt; loads Firebase Storage on phones;
-  /// catalog cards always keep the default strategy (HTML on Chrome/Safari/iOS).
-  bool get _renderInCanvasOnWeb =>
-      kIsWeb &&
-      _canSwipe &&
-      (widget.showNavigationArrows || widget.enableKeyboardNavigation) &&
-      !WebPlatform.isMobileWeb;
-
-  bool get _lazyLoadNeighbors => WebPlatform.isMobileWeb && !widget.showNavigationArrows;
+  bool get _lazyLoadNeighbors => WebPlatform.isIOSWeb && !widget.showNavigationArrows;
 
   @override
   void initState() {
@@ -223,7 +216,6 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
       fit: widget.fit,
       cacheWidth: _imageCacheSize,
       cacheHeight: _imageCacheSize,
-      renderInCanvasOnWeb: _renderInCanvasOnWeb,
     );
   }
 
@@ -399,7 +391,7 @@ class ProductNetworkImage extends StatelessWidget {
   final BoxFit fit;
   final int? cacheWidth;
   final int? cacheHeight;
-  final bool renderInCanvasOnWeb;
+  final Map<String, String>? httpHeaders;
 
   const ProductNetworkImage({
     super.key,
@@ -407,7 +399,7 @@ class ProductNetworkImage extends StatelessWidget {
     required this.fit,
     this.cacheWidth,
     this.cacheHeight,
-    this.renderInCanvasOnWeb = false,
+    this.httpHeaders,
   });
 
   Widget _placeholder() {
@@ -419,32 +411,52 @@ class ProductNetworkImage extends StatelessWidget {
     );
   }
 
+  WebHtmlElementStrategy _webImageStrategy(String url) {
+    if (!kIsWeb) return WebPlatform.networkImageStrategy;
+    final path = Uri.tryParse(url)?.path ?? url;
+    if (path.contains('/media/product_images/')) {
+      return WebHtmlElementStrategy.never;
+    }
+    return WebPlatform.networkImageStrategy;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final url = this.url.trim();
-    if (url.isEmpty) {
+    final raw = url.trim();
+    if (raw.isEmpty) {
       return const Center(child: Icon(Icons.image_outlined, color: AppColors.inkMuted, size: 32));
     }
 
-    final htmlStrategy = kIsWeb && renderInCanvasOnWeb
-        ? WebHtmlElementStrategy.never
-        : WebPlatform.networkImageStrategy;
+    final objectPath = StorageMediaUrl.objectPathFromUrl(raw);
+    final resolvedUrl = objectPath != null && StorageMediaUrl.isStaffBarcodePath(objectPath)
+        ? StorageMediaUrl.displayStaffUrl(raw)
+        : StorageMediaUrl.displayUrl(raw);
+
+    // Hero carousel uses null cache sizes on web — resize decode breaks <img> in some Chrome profiles.
+    final effectiveCacheWidth = kIsWeb ? null : cacheWidth;
+    final effectiveCacheHeight = kIsWeb ? null : cacheHeight;
+
+    // Same-origin /media URLs: canvas decode — HTML <img> overlays break inside catalog grids.
+    final htmlStrategy = _webImageStrategy(resolvedUrl);
 
     return Image.network(
-      url,
+      resolvedUrl,
+      headers: httpHeaders,
       fit: fit,
       alignment: Alignment.topCenter,
       width: double.infinity,
       height: double.infinity,
-      cacheWidth: cacheWidth,
-      cacheHeight: cacheHeight,
+      cacheWidth: effectiveCacheWidth,
+      cacheHeight: effectiveCacheHeight,
       gaplessPlayback: true,
       filterQuality: WebPlatform.networkImageQuality,
       webHtmlElementStrategy: htmlStrategy,
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return _placeholder();
-      },
+      loadingBuilder: kIsWeb
+          ? null
+          : (context, child, progress) {
+              if (progress == null) return child;
+              return _placeholder();
+            },
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Product image load failed: $error');
         return const Center(child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 32));

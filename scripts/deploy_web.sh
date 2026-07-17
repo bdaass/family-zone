@@ -9,9 +9,9 @@ flutter build web --release \
 
 "$ROOT/scripts/patch_web_build.sh"
 
-# Optional: Storage CORS (not required for Edge images after DomNetworkImage fix).
+# Optional: Storage CORS (fallback for direct Storage URLs).
 "$ROOT/scripts/apply_storage_cors.sh" || true
 
-firebase deploy --only hosting
+firebase deploy --only hosting,functions:productMedia
 
 echo "Deployed https://family-zone-2026.web.app"

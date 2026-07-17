@@ -21,18 +21,12 @@ class WebPlatform {
   /// Trim animations, shadows, and image work on iOS web.
   static bool get useLiteUi => isIOSWeb;
 
-  /// Microsoft Edge and Firefox on skwasm — HTML img overlays often fail to load Storage URLs.
-  static bool get needsCanvasNetworkImages {
-    if (!kIsWeb) return false;
-    return detect.isEdgeUserAgent || detect.isGeckoUserAgent;
-  }
-
   /// Full hero section (carousel + banners). Hidden on iPhone/iPad web.
   static bool get showDashboardHero => !isIOSWeb;
 
+  /// HTML &lt;img&gt; on all browsers — canvas decode fails for Storage URLs on Firefox/Edge.
   static WebHtmlElementStrategy get networkImageStrategy {
     if (!kIsWeb) return WebHtmlElementStrategy.never;
-    if (needsCanvasNetworkImages) return WebHtmlElementStrategy.never;
     return WebHtmlElementStrategy.prefer;
   }
 

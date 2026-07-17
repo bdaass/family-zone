@@ -7,12 +7,11 @@ import '../models/product_catalog.dart';
 import '../models/variant_inventory.dart';
 import '../services/product_share_service.dart';
 import '../services/product_view_service.dart';
-import '../services/product_image_service.dart';
-import '../utils/product_image_settings.dart';
 import '../utils/web_platform.dart';
 import '../theme/app_theme.dart';
 import '../pages/product_detail_page.dart';
 import 'product_image_carousel.dart';
+import 'staff_barcode_image.dart';
 import 'product_variant_picker.dart';
 
 class ProductDetailSheet extends StatefulWidget {
@@ -586,7 +585,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   }
 }
 
-class _AdminBarcodePreview extends StatefulWidget {
+class _AdminBarcodePreview extends StatelessWidget {
   final String imageUrl;
   final String storageProductId;
 
@@ -595,23 +594,7 @@ class _AdminBarcodePreview extends StatefulWidget {
     required this.storageProductId,
   });
 
-  @override
-  State<_AdminBarcodePreview> createState() => _AdminBarcodePreviewState();
-}
-
-class _AdminBarcodePreviewState extends State<_AdminBarcodePreview> {
-  late Future<String> _urlFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _urlFuture = ProductImageService.resolveBarcodeViewUrl(
-      productStorageId: widget.storageProductId,
-      storedUrl: widget.imageUrl,
-    );
-  }
-
-  void _openZoom(BuildContext context, String url) {
+  void _openZoom(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     showDialog<void>(
       context: context,
@@ -636,10 +619,10 @@ class _AdminBarcodePreviewState extends State<_AdminBarcodePreview> {
                     child: SizedBox(
                       width: size.width * 0.9,
                       height: size.height * 0.8,
-                      child: ProductNetworkImage(
-                        url: url,
+                      child: StaffBarcodeImage(
+                        imageUrl: imageUrl,
+                        storageProductId: storageProductId,
                         fit: BoxFit.contain,
-                        cacheWidth: ProductImageSettings.detailCacheSize,
                       ),
                     ),
                   ),
@@ -684,69 +667,43 @@ class _AdminBarcodePreviewState extends State<_AdminBarcodePreview> {
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.inkMuted),
         ),
         const SizedBox(height: 8),
-        FutureBuilder<String>(
-          future: _urlFuture,
-          builder: (context, snapshot) {
-            final loading = snapshot.connectionState != ConnectionState.done;
-            final url = snapshot.data;
-            final failed = snapshot.hasError || (!loading && (url == null || url.isEmpty));
-
-            return Material(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                onTap: loading || failed || url == null ? null : () => _openZoom(context, url),
+        Material(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: () => _openZoom(context),
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.creamDark),
+                border: Border.all(color: AppColors.creamDark),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  _imageFrame(
+                    child: StaffBarcodeImage(
+                      imageUrl: imageUrl,
+                      storageProductId: storageProductId,
+                      fit: BoxFit.contain,
+                    ),
                   ),
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      if (loading)
-                        _imageFrame(
-                          child: const Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral),
-                            ),
-                          ),
-                        )
-                      else if (failed)
-                        _imageFrame(
-                          child: const Center(
-                            child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 32),
-                          ),
-                        )
-                      else
-                        _imageFrame(
-                          child: ProductNetworkImage(
-                            url: url!,
-                            fit: BoxFit.contain,
-                            cacheWidth: ProductImageSettings.detailCacheSize,
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.zoom_in_rounded, size: 16, color: AppColors.inkMuted),
-                          const SizedBox(width: 6),
-                          Text(
-                            S.of('barcode_tap_to_zoom'),
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
-                          ),
-                        ],
+                      const Icon(Icons.zoom_in_rounded, size: 16, color: AppColors.inkMuted),
+                      const SizedBox(width: 6),
+                      Text(
+                        S.of('barcode_tap_to_zoom'),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
-            );
-          },
+            ),
+          ),
         ),
       ],
     );

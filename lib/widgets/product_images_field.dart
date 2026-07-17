@@ -5,10 +5,10 @@ import 'package:image_picker/image_picker.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
-import '../services/product_image_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/image_compressor.dart';
 import 'product_image_carousel.dart';
+import 'staff_barcode_image.dart';
 
 /// Staff product photos + mandatory barcode capture (barcode preview admin-only on edit).
 class ProductImagesField extends StatefulWidget {
@@ -383,29 +383,10 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
       Stack(
         fit: StackFit.expand,
         children: [
-          FutureBuilder<String>(
-            future: ProductImageService.resolveBarcodeViewUrl(
-              productStorageId: storageId,
-              storedUrl: url,
-            ),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.coral),
-                  ),
-                );
-              }
-              final resolved = snapshot.data;
-              if (snapshot.hasError || resolved == null || resolved.isEmpty) {
-                return const Center(
-                  child: Icon(Icons.broken_image_outlined, color: AppColors.inkMuted, size: 20),
-                );
-              }
-              return ProductNetworkImage(url: resolved, fit: BoxFit.cover);
-            },
+          StaffBarcodeImage(
+            imageUrl: url,
+            storageProductId: storageId,
+            fit: BoxFit.cover,
           ),
           _removeButton(onReplace),
         ],
