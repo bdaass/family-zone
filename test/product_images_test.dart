@@ -48,12 +48,22 @@ void main() {
         'https://a/2.jpg': 'Green',
       });
     });
-    test('imageTagColorOptions includes full palette and extras', () {
-      final options = ProductCatalog.imageTagColorOptions(extraColors: ['Custom Plum']);
-      expect(options, contains('Black'));
-      expect(options, contains('Green'));
-      expect(options, contains('Turquoise'));
+    test('imageTagColorOptions only includes entered colors', () {
+      final options = ProductCatalog.imageTagColorOptions(
+        enteredColors: ['Red', 'Custom Plum', 'red', '#2E7D32'],
+      );
+      expect(options, contains('#C62828')); // Red
+      expect(options, contains('#2E7D32')); // Green hex
       expect(options, contains('Custom Plum'));
+      expect(options, isNot(contains('#1A1A1A'))); // Black not entered
+      expect(options.where((c) => ProductCatalog.colorsMatch(c, 'Red')).length, 1);
+    });
+
+    test('imageIndexForColor matches famous name to hex tags', () {
+      const urls = ['https://a/black.jpg', 'https://a/green.jpg'];
+      const tags = {'https://a/green.jpg': '#2E7D32'};
+      expect(ProductCatalog.imageIndexForColor(urls, tags, 'Green'), 1);
+      expect(ProductCatalog.imageIndexForColor(urls, tags, '#2E7D32'), 1);
     });
 
     test('imageColorsEqual compares tag maps', () {

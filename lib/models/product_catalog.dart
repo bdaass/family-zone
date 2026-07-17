@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../utils/storage_media_url.dart';
+import 'product_color.dart';
 import 'variant_inventory.dart';
 
 /// Shared product categories, filters, and field helpers.
@@ -516,26 +517,20 @@ class ProductCatalog {
     return out;
   }
 
-  static bool colorsMatch(String a, String b) =>
-      a.trim().toLowerCase() == b.trim().toLowerCase();
+  static bool colorsMatch(String a, String b) => ProductColor.same(a, b);
 
-  /// Full palette for staff photo color tags, plus any product/inventory colors.
-  static List<String> imageTagColorOptions({Iterable<String> extraColors = const []}) {
+  /// Colors already entered on the product (inventory / colors field) for photo tagging.
+  /// Does not include the full famous palette — only what staff added for this item.
+  static List<String> imageTagColorOptions({Iterable<String> enteredColors = const []}) {
     final seen = <String>{};
     final out = <String>[];
-    void add(String raw) {
+    for (final raw in enteredColors) {
       final trimmed = raw.trim();
-      if (trimmed.isEmpty) return;
-      final key = trimmed.toLowerCase();
-      if (!seen.add(key)) return;
-      out.add(trimmed);
-    }
-
-    for (final color in S.colorSuggestions) {
-      add(color);
-    }
-    for (final color in extraColors) {
-      add(color);
+      if (trimmed.isEmpty) continue;
+      final key = ProductColor.identityKey(trimmed) ?? trimmed.toLowerCase();
+      if (!seen.add(key)) continue;
+      final hex = ProductColor.normalizeHex(trimmed) ?? ProductColor.hexForFamousName(trimmed);
+      out.add(hex ?? trimmed);
     }
     return out;
   }
@@ -678,79 +673,10 @@ class ProductCatalog {
     return '${labels.take(maxShown - 1).join(' · ')} +${colors.length - (maxShown - 1)}';
   }
 
-  static String colorDisplayName(String raw) => S.colorName(raw);
+  static String colorDisplayName(String raw) => ProductColor.displayLabel(raw);
 
-  /// Swatch fill for known colors; stable hue for any custom name.
-  static Color colorSwatchFill(String name) {
-    switch (name.toLowerCase().trim()) {
-      case 'black':
-        return const Color(0xFF1A1A1A);
-      case 'white':
-        return const Color(0xFFF4F4F4);
-      case 'navy':
-        return const Color(0xFF1B2A4A);
-      case 'beige':
-        return const Color(0xFFD8CBB8);
-      case 'gray':
-      case 'grey':
-        return const Color(0xFF9E9E9E);
-      case 'light gray':
-      case 'light grey':
-        return const Color(0xFFBDBDBD);
-      case 'dark gray':
-      case 'dark grey':
-        return const Color(0xFF424242);
-      case 'red':
-        return const Color(0xFFC62828);
-      case 'pink':
-        return const Color(0xFFE891A8);
-      case 'peach':
-        return const Color(0xFFFFCC99);
-      case 'blue':
-        return const Color(0xFF1565C0);
-      case 'light blue':
-        return const Color(0xFF90CAF9);
-      case 'green':
-        return const Color(0xFF2E7D32);
-      case 'brown':
-        return const Color(0xFF6D4C41);
-      case 'orange':
-        return const Color(0xFFE65100);
-      case 'yellow':
-        return const Color(0xFFF9A825);
-      case 'yellow butter':
-        return const Color(0xFFF5E6A3);
-      case 'purple':
-        return const Color(0xFF6A1B9A);
-      case 'lilac':
-        return const Color(0xFFC8A2C8);
-      case 'burgundy':
-        return const Color(0xFF6D1B2A);
-      case 'cream':
-        return const Color(0xFFFFF8E7);
-      case 'olive':
-        return const Color(0xFF6B7C3E);
-      case 'coral':
-        return const Color(0xFFFF7043);
-      case 'gold':
-        return const Color(0xFFD4AF37);
-      case 'ivory':
-        return const Color(0xFFFFFFF0);
-      case 'khaki':
-        return const Color(0xFFC3B091);
-      case 'maroon':
-        return const Color(0xFF800000);
-      case 'turquoise':
-        return const Color(0xFF26A69A);
-      case 'teal':
-        return const Color(0xFF00897B);
-      case 'silver':
-        return const Color(0xFFB0BEC5);
-      default:
-        final hash = name.toLowerCase().codeUnits.fold(0, (sum, c) => sum + c);
-        return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.42, 0.52).toColor();
-    }
-  }
+  /// Swatch fill for hex / famous names; stable hue for legacy custom names.
+  static Color colorSwatchFill(String name) => ProductColor.swatchFill(name);
 
   static List<String> colorsForSelection(String? raw) => colorsFromField(raw);
 
@@ -924,10 +850,10 @@ class ProductCatalog {
     return 0.0;
   }
 
-  static int? discountPercentFrom(Map<String, dynamic> data) {
+  static double? discountPercentFrom(Map<String, dynamic> data) {
     final raw = data['discountPercent'];
     if (raw != null) {
-      final parsed = raw is int ? raw : int.tryParse(raw.toString());
+      final parsed = raw is num ? raw.toDouble() : double.tryParse(raw.toString().trim());
       if (isValidDiscountPercent(parsed)) return parsed;
     }
     final price = priceFrom(data);
@@ -938,29 +864,38 @@ class ProductCatalog {
     return null;
   }
 
-  /// Parses staff input like `20` or `20%`. Returns null when empty.
-  static int? parseDiscountPercent(String text) {
+  /// Parses staff input like `20`, `25.3`, or `20%`. Returns null when empty.
+  static double? parseDiscountPercent(String text) {
     final cleaned = text.trim().replaceAll('%', '').trim();
     if (cleaned.isEmpty) return null;
-    final parsed = int.tryParse(cleaned);
+    final parsed = double.tryParse(cleaned);
     return isValidDiscountPercent(parsed) ? parsed : null;
   }
 
-  static bool isValidDiscountPercent(int? percent) => percent != null && percent > 0 && percent < 100;
+  static bool isValidDiscountPercent(double? percent) =>
+      percent != null && percent > 0 && percent < 100;
 
-  static int? percentFromPrices(double price, double soldPrice) {
+  /// Discount percent derived from prices, rounded to one decimal place.
+  static double? percentFromPrices(double price, double soldPrice) {
     if (price <= 0 || soldPrice <= 0 || soldPrice >= price) return null;
-    final percent = ((1 - soldPrice / price) * 100).round();
+    final percent = ((1 - soldPrice / price) * 1000).roundToDouble() / 10;
     return isValidDiscountPercent(percent) ? percent : null;
   }
 
-  static double soldPriceFromPercent(double price, int discountPercent) {
+  static double soldPriceFromPercent(double price, double discountPercent) {
     final discounted = price * (1 - discountPercent / 100);
     return (discounted * 100).roundToDouble() / 100;
   }
 
+  /// Compact display for staff fields / previews (`20` or `25.3`).
+  static String formatDiscountPercent(double percent) {
+    final rounded = (percent * 10).roundToDouble() / 10;
+    if (rounded == rounded.roundToDouble()) return rounded.round().toString();
+    return rounded.toStringAsFixed(1);
+  }
+
   /// Resolves sale fields from optional sale price and/or discount percent input.
-  static ({double? soldPrice, int? discountPercent, String? errorKey}) resolveSalePricing({
+  static ({double? soldPrice, double? discountPercent, String? errorKey}) resolveSalePricing({
     required double regularPrice,
     required String salePriceText,
     required String discountPercentText,
@@ -1138,7 +1073,11 @@ class ProductCatalog {
     compareStr('description', 'field_description');
     compareStr('price', 'field_price', format: (v) => '\$${_num(v).toStringAsFixed(2)}');
     compareStr('soldPrice', 'field_sale_price', format: (v) => v == null ? '—' : '\$${_num(v).toStringAsFixed(2)}');
-    compareStr('discountPercent', 'field_discount_percent', format: (v) => v == null ? '—' : '${_int(v)}%');
+    compareStr('discountPercent', 'field_discount_percent', format: (v) {
+      if (v == null) return '—';
+      final n = _num(v);
+      return '${formatDiscountPercent(n)}%';
+    });
     compareStr('size', 'size', format: (v) => sizesDisplayLabel(v?.toString()));
     compareStr('colors', 'color', format: (v) => colorsDisplayLabel(v?.toString()));
     compareStr('season', 'field_season', format: (v) => label(normalizeSeason(v?.toString())));

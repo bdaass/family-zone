@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/cart_item.dart';
 import '../models/product_catalog.dart';
+import '../models/product_color.dart';
 import '../models/variant_inventory.dart';
 import '../services/cart_service.dart';
 import '../theme/app_theme.dart';
@@ -95,6 +96,12 @@ class _ProductVariantPickerState extends State<ProductVariantPicker> {
         ? _availableSizesForColor(_selectedColor)
         : ProductCatalog.sizesForSelection(widget.sizeField);
     _selectedSize = _sizes.isNotEmpty ? _sizes.first : '';
+    if (_selectedColor.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onColorSelected?.call(_selectedColor);
+      });
+    }
   }
 
   void _onColorSelected(String color) {
@@ -174,9 +181,23 @@ class _ProductVariantPickerState extends State<ProductVariantPicker> {
             spacing: 8,
             runSpacing: 8,
             children: _colors.map((color) {
-              final selected = _selectedColor == color;
+              final selected = _selectedColor.isNotEmpty && ProductColor.same(_selectedColor, color);
+              final label = ProductColor.clientLabel(color);
+              final fill = ProductColor.swatchFill(color);
               return ChoiceChip(
-                label: Text(ProductCatalog.colorDisplayName(color)),
+                label: label != null
+                    ? Text(label)
+                    : Container(
+                        width: 28,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: fill,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                            color: selected ? AppColors.white.withValues(alpha: 0.7) : AppColors.creamDark,
+                          ),
+                        ),
+                      ),
                 selected: selected,
                 onSelected: (_) => _onColorSelected(color),
                 selectedColor: AppColors.coral,
@@ -184,6 +205,7 @@ class _ProductVariantPickerState extends State<ProductVariantPicker> {
                   color: selected ? AppColors.white : AppColors.ink,
                   fontWeight: FontWeight.w700,
                 ),
+                padding: label == null ? const EdgeInsets.symmetric(horizontal: 6, vertical: 4) : null,
               );
             }).toList(),
           ),

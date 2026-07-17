@@ -703,6 +703,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       productId: ProductCatalog.productIdFrom(data, docId),
       title: ProductCatalog.titleFrom(data),
       imageUrl: ProductCatalog.primaryImageUrl(data),
+      imageUrls: ProductCatalog.productImageUrlsFrom(data),
+      imageColorByUrl: ProductCatalog.imageColorByUrlFrom(data),
       sizeField: ProductCatalog.sizeFrom(data),
       colorField: ProductCatalog.colorsFrom(data),
       price: ProductCatalog.priceFrom(data),

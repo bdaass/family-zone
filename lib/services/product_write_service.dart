@@ -137,10 +137,16 @@ class ProductWriteService {
 
     final proposedDiscount = proposed['discountPercent'];
     final currentDiscount = ProductCatalog.discountPercentFrom(current);
-    final parsedDiscount = proposedDiscount is int
-        ? proposedDiscount
-        : int.tryParse(proposedDiscount?.toString() ?? '');
-    if (parsedDiscount != currentDiscount) return true;
+    final parsedDiscount = proposedDiscount is num
+        ? proposedDiscount.toDouble()
+        : double.tryParse(proposedDiscount?.toString() ?? '');
+    if (parsedDiscount == null && currentDiscount != null) return true;
+    if (parsedDiscount != null && currentDiscount == null) return true;
+    if (parsedDiscount != null &&
+        currentDiscount != null &&
+        (parsedDiscount - currentDiscount).abs() > 0.001) {
+      return true;
+    }
 
     final proposedInventory = proposed['variantInventory'];
     if (proposedInventory is Map) {

@@ -53,7 +53,8 @@ class _SalePricingFieldsState extends State<SalePricingFields> {
     _syncing = true;
     if (sale != null && sale > 0 && sale < price) {
       final percent = ProductCatalog.percentFromPrices(price, sale);
-      widget.discountPercentController.text = percent?.toString() ?? '';
+      widget.discountPercentController.text =
+          percent != null ? ProductCatalog.formatDiscountPercent(percent) : '';
     } else if (widget.salePriceController.text.trim().isEmpty) {
       widget.discountPercentController.clear();
     }
@@ -101,7 +102,7 @@ class _SalePricingFieldsState extends State<SalePricingFields> {
             Expanded(
               child: TextField(
                 controller: widget.discountPercentController,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: S.of('field_discount_percent'),
                   hintText: S.of('field_discount_percent_hint'),
@@ -147,7 +148,9 @@ class _SalePricingFieldsState extends State<SalePricingFields> {
       S.fmt('field_discount_preview', {'price': resolved.soldPrice!.toStringAsFixed(2)}),
     ];
     if (resolved.discountPercent != null) {
-      parts.add(S.fmt('field_discount_percent_preview', {'percent': '${resolved.discountPercent}'}));
+      parts.add(S.fmt('field_discount_percent_preview', {
+        'percent': ProductCatalog.formatDiscountPercent(resolved.discountPercent!),
+      }));
     }
     return parts.join(' · ');
   }

@@ -23,7 +23,7 @@ class EditProductSheet extends StatefulWidget {
   final String size;
   final String colors;
   final double price;
-  final int? discountPercent;
+  final double? discountPercent;
   final double? soldPrice;
   final String season;
   final String ageGroup;
@@ -104,7 +104,9 @@ class _EditProductSheetState extends State<EditProductSheet> {
     _staffNotesController = TextEditingController(text: widget.staffNotes);
     _priceController = TextEditingController(text: widget.price.toStringAsFixed(2));
     _discountPercentController = TextEditingController(
-      text: widget.discountPercent?.toString() ?? '',
+      text: widget.discountPercent != null
+          ? ProductCatalog.formatDiscountPercent(widget.discountPercent!)
+          : '',
     );
     _salePriceController = TextEditingController(
       text: widget.soldPrice != null ? widget.soldPrice!.toStringAsFixed(2) : '',
@@ -119,7 +121,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
 
   List<String> _imageColorOptions() {
     return ProductCatalog.imageTagColorOptions(
-      extraColors: [
+      enteredColors: [
         ...ProductCatalog.colorsFromField(widget.colors),
         ...VariantInventory.uniqueColors(_variantInventory),
       ],

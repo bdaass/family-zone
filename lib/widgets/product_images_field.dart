@@ -224,14 +224,15 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
           ),
         ),
         SizedBox(height: gap),
-        if (widget.availableColors.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              S.of('field_image_color_hint'),
-              style: TextStyle(fontSize: widget.dense ? 10 : 11, color: AppColors.inkMuted, height: 1.35),
-            ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            widget.availableColors.isEmpty
+                ? S.of('field_image_color_need_stock')
+                : S.of('field_image_color_hint'),
+            style: TextStyle(fontSize: widget.dense ? 10 : 11, color: AppColors.inkMuted, height: 1.35),
           ),
+        ),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -348,10 +349,26 @@ class _ProductImagesFieldState extends State<ProductImagesField> {
                 for (final color in widget.availableColors)
                   DropdownMenuItem<String?>(
                     value: color,
-                    child: Text(
-                      ProductCatalog.colorDisplayName(color),
-                      style: const TextStyle(fontSize: 11),
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: ProductCatalog.colorSwatchFill(color),
+                            borderRadius: BorderRadius.circular(2),
+                            border: Border.all(color: AppColors.creamDark),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            ProductCatalog.colorDisplayName(color),
+                            style: const TextStyle(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],

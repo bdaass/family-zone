@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/cart_item.dart';
-import '../models/product_catalog.dart';
+import '../models/product_color.dart';
 import '../services/cart_service.dart';
 import '../services/order_service.dart';
 import '../theme/app_theme.dart';
@@ -268,11 +268,7 @@ class _CartLineTile extends StatelessWidget {
                     S.fmt('cart_line_size', {'size': item.selectedSize}),
                     style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
                   ),
-                  if (item.selectedColor.isNotEmpty)
-                    Text(
-                      S.fmt('cart_line_color', {'color': ProductCatalog.colorDisplayName(item.selectedColor)}),
-                      style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
-                    ),
+                  if (item.selectedColor.isNotEmpty) _cartColorLine(item.selectedColor),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -296,6 +292,36 @@ class _CartLineTile extends StatelessWidget {
           IconButton(
             onPressed: onRemove,
             icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.inkMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cartColorLine(String color) {
+    final label = ProductColor.clientLabel(color);
+    if (label != null) {
+      return Text(
+        S.fmt('cart_line_color', {'color': label}),
+        style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        children: [
+          Text(
+            '${S.of('color')}: ',
+            style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
+          ),
+          Container(
+            width: 18,
+            height: 12,
+            decoration: BoxDecoration(
+              color: ProductColor.swatchFill(color),
+              borderRadius: BorderRadius.circular(2),
+              border: Border.all(color: AppColors.creamDark),
+            ),
           ),
         ],
       ),

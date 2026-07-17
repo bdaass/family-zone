@@ -1,5 +1,6 @@
 import '../config/store_config.dart';
 import 'product_catalog.dart';
+import 'product_color.dart';
 
 /// Per-branch stock: color → size → quantity.
 typedef BranchVariantStock = Map<String, Map<String, int>>;
@@ -124,7 +125,7 @@ class VariantInventory {
     var total = 0;
     for (final branch in inventory.values) {
       for (final colorEntry in branch.entries) {
-        if (!_equalsIgnoreCase(colorEntry.key, color)) continue;
+        if (!_colorsEqual(colorEntry.key, color)) continue;
         for (final sizeEntry in colorEntry.value.entries) {
           if (_equalsIgnoreCase(sizeEntry.key, size)) total += sizeEntry.value;
         }
@@ -150,7 +151,7 @@ class VariantInventory {
     final counts = <String, int>{};
     for (final branch in inventory.values) {
       for (final colorEntry in branch.entries) {
-        if (!_equalsIgnoreCase(colorEntry.key, color)) continue;
+        if (!_colorsEqual(colorEntry.key, color)) continue;
         for (final sizeEntry in colorEntry.value.entries) {
           if (sizeEntry.value > 0) {
             counts[sizeEntry.key] = (counts[sizeEntry.key] ?? 0) + sizeEntry.value;
@@ -165,27 +166,29 @@ class VariantInventory {
 
   static bool _equalsIgnoreCase(String a, String b) => a.toLowerCase() == b.toLowerCase();
 
+  static bool _colorsEqual(String a, String b) => ProductColor.same(a, b);
+
   static String? findCanonicalColor(VariantInventoryMap inventory, String color) {
     for (final branch in inventory.values) {
       for (final key in branch.keys) {
-        if (_equalsIgnoreCase(key, color)) return key;
+        if (_colorsEqual(key, color)) return key;
       }
     }
     return null;
   }
 
   static String? findCanonicalSize(BranchVariantStock branchColors, String color, String size) {
-    final colors = branchColors[color];
-    if (colors == null) {
+    Map<String, int>? sizes = branchColors[color];
+    if (sizes == null) {
       for (final colorEntry in branchColors.entries) {
-        if (!_equalsIgnoreCase(colorEntry.key, color)) continue;
-        for (final key in colorEntry.value.keys) {
-          if (_equalsIgnoreCase(key, size)) return key;
+        if (_colorsEqual(colorEntry.key, color)) {
+          sizes = colorEntry.value;
+          break;
         }
       }
-      return null;
     }
-    for (final key in colors.keys) {
+    if (sizes == null) return null;
+    for (final key in sizes.keys) {
       if (_equalsIgnoreCase(key, size)) return key;
     }
     return null;

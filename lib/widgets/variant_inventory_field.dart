@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../config/store_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/product_catalog.dart';
+import '../models/product_color.dart';
 import '../models/variant_inventory.dart';
 import '../theme/app_theme.dart';
+import 'product_color_picker_dialog.dart';
 
 enum _BranchInventoryMode { unset, notDetermined, specified }
 
@@ -32,40 +34,45 @@ class VariantInventoryField extends StatefulWidget {
 class _VariantInventoryFieldState extends State<VariantInventoryField> {
   late VariantInventoryMap _inventory;
   final Map<String, _BranchInventoryMode> _branchModes = {};
-  final Map<String, TextEditingController> _colorControllers = {};
-  final Map<String, FocusNode> _colorFocusNodes = {};
   final Map<String, TextEditingController> _sizeControllers = {};
   final Map<String, TextEditingController> _qtyControllers = {};
-  final Map<String, String?> _selectedQuickColor = {};
+  /// Selected color stored as `#RRGGBB` (famous or custom).
+  final Map<String, String?> _selectedColorHex = {};
+  final Map<String, bool> _branchExpanded = {};
 
   @override
   void initState() {
     super.initState();
     _inventory = _cloneInventory(widget.initialInventory);
+    final firstId = StoreConfig.locations.isNotEmpty ? StoreConfig.locations.first.id : null;
+    var anyExpanded = false;
     for (final branch in StoreConfig.locations) {
       final hasEntries = _inventory[branch.id]?.isNotEmpty == true;
       _branchModes[branch.id] =
           hasEntries ? _BranchInventoryMode.specified : _BranchInventoryMode.unset;
-      _colorControllers[branch.id] = TextEditingController();
-      _colorFocusNodes[branch.id] = FocusNode();
       _sizeControllers[branch.id] = TextEditingController();
       _qtyControllers[branch.id] = TextEditingController();
-      _selectedQuickColor[branch.id] = null;
+      _selectedColorHex[branch.id] = null;
+      // Expand branches that already have stock; otherwise only the first branch.
+      _branchExpanded[branch.id] = hasEntries;
+      if (hasEntries) anyExpanded = true;
+    }
+    if (!anyExpanded && firstId != null) {
+      _branchExpanded[firstId] = true;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _notify());
   }
 
+  void _toggleBranchExpanded(String branchId) {
+    setState(() {
+      _branchExpanded[branchId] = !(_branchExpanded[branchId] ?? false);
+    });
+  }
+
   @override
   void dispose() {
-    for (final controller in [
-      ..._colorControllers.values,
-      ..._sizeControllers.values,
-      ..._qtyControllers.values,
-    ]) {
+    for (final controller in [..._sizeControllers.values, ..._qtyControllers.values]) {
       controller.dispose();
-    }
-    for (final node in _colorFocusNodes.values) {
-      node.dispose();
     }
     super.dispose();
   }
@@ -104,26 +111,26 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
     _notify();
   }
 
-  void _selectQuickColor(String branchId, String color) {
+  void _selectFamousColor(String branchId, String englishName) {
     setState(() {
-      _selectedQuickColor[branchId] = color;
-      _colorControllers[branchId]!.text = color;
+      _selectedColorHex[branchId] = ProductColor.toStoredHex(englishName);
     });
   }
 
-  bool _isQuickColorSelected(String branchId, String color) {
-    final picked = _selectedQuickColor[branchId];
-    if (picked != null && picked.toLowerCase() == color.toLowerCase()) return true;
-    final typed = _colorControllers[branchId]!.text.trim();
-    return typed.isNotEmpty && typed.toLowerCase() == color.toLowerCase();
+  Future<void> _pickCustomColor(String branchId) async {
+    final current = _selectedColorHex[branchId];
+    final initial = current != null ? ProductColor.swatchFill(current) : const Color(0xFFC62828);
+    final hex = await showProductColorPicker(context, initialColor: initial);
+    if (hex == null || !mounted) return;
+    setState(() => _selectedColorHex[branchId] = hex);
   }
 
   void _removeColor(String branchId, String color) {
     setState(() {
       _inventory[branchId]?.remove(color);
-      if (_selectedQuickColor[branchId]?.toLowerCase() == color.toLowerCase()) {
-        _selectedQuickColor[branchId] = null;
-        _colorControllers[branchId]!.clear();
+      final selected = _selectedColorHex[branchId];
+      if (selected != null && ProductColor.same(selected, color)) {
+        _selectedColorHex[branchId] = null;
       }
     });
     _notify();
@@ -140,29 +147,34 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
   }
 
   void _addVariantLine(String branchId) {
-    final color = _colorControllers[branchId]!.text.trim();
+    final colorHex = _selectedColorHex[branchId];
     final size = _sizeControllers[branchId]!.text.trim();
     final qty = int.tryParse(_qtyControllers[branchId]!.text.trim());
-    if (color.isEmpty || size.isEmpty || qty == null || qty < 0) return;
+    if (colorHex == null || colorHex.isEmpty || size.isEmpty || qty == null || qty < 0) return;
 
     setState(() {
       _branchModes[branchId] = _BranchInventoryMode.specified;
       _inventory.putIfAbsent(branchId, () => {});
       final branch = _inventory[branchId]!;
-      final existingColor = VariantInventory.findCanonicalColor({branchId: branch}, color) ?? color;
+      final existingColor = VariantInventory.findCanonicalColor({branchId: branch}, colorHex) ?? colorHex;
       branch.putIfAbsent(existingColor, () => {});
       final existingSize = VariantInventory.findCanonicalSize(branch, existingColor, size) ?? size;
       branch[existingColor]![existingSize] = qty;
-      _selectedQuickColor[branchId] = existingColor;
-      _colorControllers[branchId]!.text = existingColor;
+      _selectedColorHex[branchId] = existingColor.startsWith('#')
+          ? existingColor
+          : (ProductColor.hexForFamousName(existingColor) ?? colorHex);
       _sizeControllers[branchId]!.clear();
       _qtyControllers[branchId]!.clear();
     });
     _notify();
   }
 
-  static Color _labelOnSwatch(Color fill) =>
-      fill.computeLuminance() > 0.55 ? AppColors.ink : AppColors.white;
+  /// Dropdown value: famous English name when selected color matches palette, else null.
+  String? _dropdownFamousValue(String branchId) {
+    final hex = _selectedColorHex[branchId];
+    if (hex == null) return null;
+    return ProductColor.famousEnglishName(hex);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -194,9 +206,25 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
     );
   }
 
+  String _branchCollapsedSummary(String branchId, _BranchInventoryMode mode, Map<String, Map<String, int>> colors) {
+    if (mode == _BranchInventoryMode.notDetermined) {
+      return ProductCatalog.notDeterminedLabel();
+    }
+    if (colors.isEmpty) return S.of('variant_branch_no_stock');
+    final colorCount = colors.length;
+    final sizeCount = colors.values.fold<int>(0, (sum, sizes) => sum + sizes.length);
+    return S.fmt('variant_branch_stock_summary', {
+      'colors': '$colorCount',
+      'sizes': '$sizeCount',
+    });
+  }
+
   Widget _branchSection(String branchId, TextStyle chipStyle, double gap) {
     final mode = _branchModes[branchId] ?? _BranchInventoryMode.unset;
     final colors = _inventory[branchId] ?? {};
+    final selectedHex = _selectedColorHex[branchId];
+    final famousValue = _dropdownFamousValue(branchId);
+    final expanded = _branchExpanded[branchId] ?? false;
 
     return Container(
       padding: EdgeInsets.all(widget.dense ? 12 : 14),
@@ -209,25 +237,57 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppColors.gold.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _toggleBranchExpanded(branchId),
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppColors.gold.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.storefront_outlined, size: 16, color: AppColors.ink),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ProductCatalog.branchLabel(branchId),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.ink),
+                          ),
+                          if (!expanded) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              _branchCollapsedSummary(branchId, mode, colors),
+                              style: TextStyle(
+                                fontSize: widget.dense ? 10 : 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: expanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: const Icon(Icons.expand_more_rounded, color: AppColors.inkMuted),
+                    ),
+                  ],
                 ),
-                child: const Icon(Icons.storefront_outlined, size: 16, color: AppColors.ink),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  ProductCatalog.branchLabel(branchId),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.ink),
-                ),
-              ),
-            ],
+            ),
           ),
+          if (expanded) ...[
           if (widget.requireExplicitChoice) ...[
             const SizedBox(height: 10),
             Wrap(
@@ -275,79 +335,79 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
               ),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: S.colorSuggestions.map((color) => _quickColorChip(branchId, color)).toList(),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              S.of('variant_custom_color_hint'),
-              style: TextStyle(fontSize: widget.dense ? 10 : 11, color: AppColors.inkMuted, height: 1.35),
-            ),
-            const SizedBox(height: 8),
-            RawAutocomplete<String>(
-              textEditingController: _colorControllers[branchId],
-              focusNode: _colorFocusNodes[branchId],
-              optionsBuilder: (value) {
-                final q = value.text.trim().toLowerCase();
-                if (q.isEmpty) return const Iterable<String>.empty();
-                return S.colorSuggestions.where((color) {
-                  final en = color.toLowerCase();
-                  final localized = S.colorName(color).toLowerCase();
-                  return en.contains(q) || localized.contains(q);
-                });
-              },
-              displayStringForOption: S.colorName,
-              onSelected: (color) => _selectQuickColor(branchId, color),
-              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                return TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  textCapitalization: TextCapitalization.words,
-                  onChanged: (_) => setState(() => _selectedQuickColor[branchId] = null),
-                  decoration: InputDecoration(
-                    isDense: widget.dense,
-                    labelText: S.of('color'),
-                    hintText: S.of('field_color_input_hint'),
-                    prefixIcon: const Icon(Icons.palette_outlined, size: 20),
-                  ),
-                );
-              },
-              optionsViewBuilder: (context, onSelected, options) {
-                final optionList = options.toList();
-                if (optionList.isEmpty) return const SizedBox.shrink();
-
-                return Align(
-                  alignment: AlignmentDirectional.topStart,
-                  child: Material(
-                    elevation: 4,
-                    borderRadius: BorderRadius.circular(10),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 220, maxWidth: 320),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: optionList.length,
-                        itemBuilder: (context, index) {
-                          final color = optionList[index];
-                          final fill = ProductCatalog.colorSwatchFill(color);
-                          return ListTile(
-                            dense: true,
-                            leading: CircleAvatar(
-                              radius: 10,
-                              backgroundColor: fill,
-                            ),
-                            title: Text(S.colorName(color), style: const TextStyle(fontWeight: FontWeight.w600)),
-                            onTap: () => onSelected(color),
-                          );
-                        },
-                      ),
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: famousValue,
+              isExpanded: true,
+              decoration: InputDecoration(
+                isDense: widget.dense,
+                labelText: S.of('color'),
+                prefixIcon: const Icon(Icons.palette_outlined, size: 20),
+              ),
+              hint: Text(S.of('variant_color_dropdown_hint')),
+              items: [
+                for (final name in ProductColor.famousNames)
+                  DropdownMenuItem<String>(
+                    value: name,
+                    child: Row(
+                      children: [
+                        _ColorRect(color: ProductColor.swatchFill(name), size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            S.colorName(name),
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                );
+              ],
+              onChanged: (name) {
+                if (name == null) return;
+                _selectFamousColor(branchId, name);
               },
             ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => _pickCustomColor(branchId),
+              icon: const Icon(Icons.colorize_rounded, size: 18),
+              label: Text(S.of('variant_custom_color_picker')),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.ink,
+                side: const BorderSide(color: AppColors.creamDark),
+                padding: EdgeInsets.symmetric(vertical: widget.dense ? 10 : 12, horizontal: 12),
+              ),
+            ),
+            if (selectedHex != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _ColorRect(color: ProductColor.swatchFill(selectedHex), size: 28, radius: 6),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ProductColor.displayLabel(selectedHex),
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                        ),
+                        Text(
+                          selectedHex,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.inkMuted,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
             SizedBox(height: gap),
             TextField(
               controller: _sizeControllers[branchId],
@@ -374,7 +434,7 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => _addVariantLine(branchId),
+                onPressed: selectedHex == null ? null : () => _addVariantLine(branchId),
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: Text(
                   S.of('variant_add_line'),
@@ -389,64 +449,14 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
               ),
             ),
           ],
+          ],
         ],
       ),
     );
   }
 
-  Widget _quickColorChip(String branchId, String color) {
-    final fill = ProductCatalog.colorSwatchFill(color);
-    final selected = _isQuickColorSelected(branchId, color);
-    final labelColor = selected ? _labelOnSwatch(fill) : AppColors.ink;
-
-    return Material(
-      color: selected ? fill : AppColors.cream,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        onTap: () => _selectQuickColor(branchId, color),
-        borderRadius: BorderRadius.circular(999),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: selected ? AppColors.ink : AppColors.creamDark,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 16,
-                height: 16,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: fill,
-                  border: Border.all(
-                    color: selected ? AppColors.white.withValues(alpha: 0.8) : AppColors.creamDark,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                S.colorName(color),
-                style: TextStyle(
-                  fontSize: widget.dense ? 11 : 12,
-                  fontWeight: FontWeight.w800,
-                  color: labelColor,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _savedColorCard(String branchId, String color, Map<String, int> sizes) {
-    final fill = ProductCatalog.colorSwatchFill(color);
+    final fill = ProductColor.swatchFill(color);
 
     return Container(
       width: double.infinity,
@@ -462,20 +472,22 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
         children: [
           Row(
             children: [
-              Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: fill,
-                  border: Border.all(color: AppColors.creamDark),
-                ),
-              ),
+              _ColorRect(color: fill, size: 22, radius: 4),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  ProductCatalog.colorDisplayName(color),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.ink),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ProductColor.displayLabel(color),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.ink),
+                    ),
+                    if (ProductColor.normalizeHex(color) != null || ProductColor.hexForFamousName(color) != null)
+                      Text(
+                        ProductColor.normalizeHex(color) ?? ProductColor.hexForFamousName(color)!,
+                        style: const TextStyle(fontSize: 10, color: AppColors.inkMuted, fontFamily: 'monospace'),
+                      ),
+                  ],
                 ),
               ),
               IconButton(
@@ -507,6 +519,27 @@ class _VariantInventoryFieldState extends State<VariantInventoryField> {
             }).toList(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ColorRect extends StatelessWidget {
+  final Color color;
+  final double size;
+  final double radius;
+
+  const _ColorRect({required this.color, this.size = 18, this.radius = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: AppColors.creamDark),
       ),
     );
   }
