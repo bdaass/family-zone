@@ -1,7 +1,7 @@
 name: family_zone
 description: "Family Zone — fashion for the whole family."
 publish_to: 'none'
-version: 1.0.0+13
+version: 1.0.0+14
 
 environment:
   sdk: ^3.9.2
